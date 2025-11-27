@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF RAG System</title>
+    <style>
+        * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* GLOBAL */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f1f1f1;
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+/* LAYOUT */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 300px 1fr 350px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    height: calc(100vh - 40px);
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #dcdcdc;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+    overflow: hidden;
+}
+
+/* --------------------------------------------------------------
+   HEADER (now unified with top, no card shadow)
+----------------------------------------------------------------*/
+.header {
+    grid-column: 1 / -1;
+    background: #ffffff;
+    color: #333333;
+    padding: 20px 30px;
+    text-align: center;
+    border-bottom: 1px solid #e3e3e3;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.header h1 {
+    font-size: 1.7em;
+    margin-bottom: 5px;
+}
+
+.header p {
+    opacity: 0.8;
+    font-size: 0.95em;
+}
+
+/* --------------------------------------------------------------
+   LEFT PANEL (Upload Section) — no card boundaries, soft divider
+----------------------------------------------------------------*/
+.upload-section {
+    grid-column: 1;
+    grid-row: 2;
+    background: #ffffff;
+    border-right: 1px solid #e3e3e3;
+    padding: 25px;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Upload Box */
+.upload-box {
+    border: 2px dashed #cccccc;
+    border-radius: 10px;
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    background: #fafafa;
+    transition: 0.25s ease;
+}
+
+.upload-box:hover {
+    border-color: #999;
+    background: #f3f3f3;
+}
+
+.upload-box.dragging {
+    border-color: #666;
+    background: #e8e8e8;
+}
+
+.upload-icon {
+    font-size: 34px;
+    margin-bottom: 12px;
+}
+
+#fileInput {
+    display: none;
+}
+
+/* Button */
+.btn {
+    background: #4a4a4a;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.btn:hover {
+    background: #5a5a5a;
+}
+
+.btn:disabled {
+    background: #b5b5b5;
+}
+
+/* --------------------------------------------------------------
+   CENTER PANEL (Chat Section)
+----------------------------------------------------------------*/
+.chat-section {
+    grid-column: 2;
+    grid-row: 2;
+    background: #ffffff;
+    border-right: 1px solid #e3e3e3;
+    display: flex;
+    flex-direction: column;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Chat Messages */
+.chat-messages {
+    flex: 1;
+    padding: 22px;
+    overflow-y: auto;
+    background: #fafafa;
+}
+
+/* Message Bubbles */
+.message {
+    margin-bottom: 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.message.user {
+    flex-direction: row-reverse;
+}
+
+.message-content {
+    max-width: 75%;
+    padding: 14px 18px;
+    border-radius: 16px;
+    line-height: 1.6;
+}
+
+.message.user .message-content {
+    background: #3a3a3a;
+    color: white;
+}
+
+.message.assistant .message-content {
+    background: #ffffff;
+    border: 1px solid #dcdcdc;
+    color: #333;
+}
+
+/* Avatar */
+.message-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: bold;
+    flex-shrink: 0;
+    background: #dcdcdc;
+}
+
+.message.user .message-avatar {
+    background: #3a3a3a;
+    color: white;
+}
+
+/* Chat Input */
+.chat-input-section {
+    padding: 18px 20px;
+    border-top: 1px solid #e3e3e3;
+    background: white;
+}
+
+.query-input-wrapper {
+    display: flex;
+    gap: 10px;
+}
+
+#queryInput {
+    flex: 1;
+    padding: 14px;
+    border: 2px solid #dddddd;
+    border-radius: 25px;
+    font-size: 15px;
+    resize: none;
+    background: #fafafa;
+}
+
+#queryInput:focus {
+    border-color: #4a4a4a;
+    outline: none;
+}
+
+/* --------------------------------------------------------------
+   RIGHT PANEL (Sidebar)
+----------------------------------------------------------------*/
+.sidebar {
+    grid-column: 3;
+    grid-row: 2;
+    background: white;
+    padding: 25px;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Sidebar Header */
+.sidebar-header {
+    background: #ffffff;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #e3e3e3;
+    color: #333;
+    text-align: center;
+}
+
+.sidebar-header h2 {
+    font-size: 1.15em;
+    font-weight: 600;
+}
+
+/* Document List */
+.documents-list {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 18px;
+}
+
+/* Document Card */
+.document-card {
+    background: #fafafa;
+    border: 1px solid #e1e1e1;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+    transition: 0.25s ease;
+    position: relative;
+}
+
+.document-card:hover {
+    background: #f3f3f3;
+    transform: translateY(-1px);
+}
+
+.doc-title {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.doc-meta {
+    font-size: 12px;
+    color: #777;
+    margin: 4px 0;
+}
+
+.doc-meta strong {
+    color: #333333;
+}
+
+/* Delete Button */
+.delete-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #666;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 23px;
+    height: 23px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.delete-btn:hover {
+    background: #444;
+}
+
+/* Status Messages */
+.status-message {
+    padding: 12px;
+    border-radius: 8px;
+    margin: 15px 0;
+    display: none;
+}
+
+.status-message.success {
+    background: #e8f6ea;
+    color: #1b5e20;
+    border: 1px solid #cdeccd;
+}
+
+.status-message.error {
+    background: #fdecea;
+    color: #b71c1c;
+    border: 1px solid #f5c6cb;
+}
+
+.status-message.info {
+    background: #eef7ff;
+    color: #0c4a6e;
+    border: 1px solid #c6e0f5;
+}
+
+/* Empty states */
+.empty-state {
+    text-align: center;
+    padding: 35px 20px;
+    color: #999;
+}
+
+.empty-state-icon {
+    font-size: 42px;
+    margin-bottom: 12px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cccccc;
+    border-radius: 4px;
+}
+
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto 1fr auto;
+            }
+
+            .upload-section {
+                grid-column: 1;
+                grid-row: 2;
+            }
+
+            .chat-section {
+                grid-column: 1;
+                grid-row: 3;
+            }
+
+            .sidebar {
+                grid-column: 1;
+                grid-row: 4;
+                max-height: 300px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto auto;
+                gap: 15px;
+            }
+
+            .upload-section,
+            .chat-section,
+            .sidebar {
+                margin: 0;
+            }
+
+            .message-content {
+                max-width: 85%;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 PDF RAG System</h1>
+            <p>Upload PDFs, Extract Metadata, and Query with AI</p>
+        </div>
+
+        <div class="upload-section">
+            <h3 style="margin-bottom: 20px; color: #333;">📄 Upload Documents</h3>
+            <div class="upload-box" id="uploadBox">
+                <div class="upload-icon">📄</div>
+                <h4>Drop PDF here or click to upload</h4>
+                <p style="color: #666; margin-top: 10px; font-size: 0.9em;">Maximum file size: 100MB</p>
+                <input type="file" id="fileInput" accept=".pdf">
+                <button class="btn" style="margin-top: 15px;" onclick="document.getElementById('fileInput').click()">
+                    Choose File
+                </button>
+            </div>
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+
+        <div class="chat-section">
+            <div class="chat-messages" id="chatMessages">
+                <div class="empty-state">
+                    <div class="empty-state-icon">💬</div>
+                    <p>Upload documents and start asking questions</p>
+                </div>
+            </div>
+            <div class="chat-input-section">
+                <div class="query-input-wrapper">
+                    <textarea 
+                        id="queryInput" 
+                        placeholder="Ask a question about your uploaded documents..." 
+                        rows="1"
+                        oninput="autoResize(this)"
+                        onkeydown="handleKeyDown(event)"
+                    ></textarea>
+                    <button class="btn" id="queryBtn" onclick="submitQuery()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📋 Uploaded Documents</h2>
+                <p style="opacity: 0.9; font-size: 0.9em; margin-top: 5px;" id="docCount">0 documents</p>
+            </div>
+            <div class="documents-list" id="documentsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📁</div>
+                    <p>No documents uploaded yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const statusMessage = document.getElementById('statusMessage');
+        const documentsList = document.getElementById('documentsList');
+        const chatMessages = document.getElementById('chatMessages');
+        const queryInput = document.getElementById('queryInput');
+        const queryBtn = document.getElementById('queryBtn');
+        const docCount = document.getElementById('docCount');
+
+        // Load documents on page load
+        loadDocuments();
+
+        // Drag and drop handlers
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragging');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragging');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragging');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        // Auto-resize textarea
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // Handle Enter key for query
+        function handleKeyDown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitQuery();
+            }
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message ${type}`;
+            statusMessage.style.display = 'block';
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        async function handleFileUpload(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showStatus('Please upload a PDF file', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showStatus('Uploading and processing... This may take a moment.', 'info');
+            queryBtn.disabled = true;
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus(`✓ Successfully uploaded: ${data.metadata.title}`, 'success');
+                    loadDocuments();
+                    fileInput.value = '';
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Upload failed: ${error.message}`, 'error');
+            } finally {
+                queryBtn.disabled = false;
+            }
+        }
+
+        async function loadDocuments() {
+            try {
+                const response = await fetch('/documents');
+                const data = await response.json();
+
+                if (data.documents && data.documents.length > 0) {
+                    documentsList.innerHTML = data.documents.map(doc => `
+                        <div class="document-card">
+                            <button class="delete-btn" onclick="deleteDocument('${doc.name}')" title="Delete document">×</button>
+                            <div class="doc-title">${doc.title || doc.display_name}</div>
+                            <div class="doc-meta"><strong>ID:</strong> ${doc.id}</div>
+                            <div class="doc-meta"><strong>File:</strong> ${doc.file_name}</div>
+                        </div>
+                    `).join('');
+                    docCount.textContent = `${data.documents.length} document${data.documents.length !== 1 ? 's' : ''}`;
+                } else {
+                    documentsList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📁</div>
+                            <p>No documents uploaded yet</p>
+                        </div>
+                    `;
+                    docCount.textContent = '0 documents';
+                }
+            } catch (error) {
+                console.error('Error loading documents:', error);
+            }
+        }
+
+        async function deleteDocument(docName) {
+            if (!confirm('Are you sure you want to delete this document?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete/${encodeURIComponent(docName)}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showStatus('Document deleted successfully', 'success');
+                    loadDocuments();
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Delete failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function submitQuery() {
+            const question = queryInput.value.trim();
+            
+            if (!question) {
+                showStatus('Please enter a question', 'error');
+                return;
+            }
+
+            // Remove empty state if present
+            const emptyState = chatMessages.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            // Add user message
+            addMessage(question, 'user');
+            
+            // Clear input and disable
+            queryInput.value = '';
+            autoResize(queryInput);
+            queryBtn.disabled = true;
+            queryBtn.innerHTML = '<span class="loading"></span>';
+            
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Add assistant message
+                    let answerHtml = formatMarkdown(data.answer);
+                    
+                    if (data.citations && data.citations.length > 0) {
+                        answerHtml += `
+                            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                                <strong style="color: #333333; font-size: 0.9em;">Citations:</strong>
+                                <ul style="margin-top: 8px; margin-left: 20px; font-size: 0.9em;">
+                                    ${data.citations.map(c => `<li>${c}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    addMessage(answerHtml, 'assistant');
+                } else {
+                    addMessage(`Error: ${data.error}`, 'assistant');
+                }
+            } catch (error) {
+                addMessage(`Query failed: ${error.message}`, 'assistant');
+            } finally {
+                queryBtn.disabled = false;
+                queryBtn.textContent = 'Send';
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        function addMessage(content, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = sender === 'user' ? 'U' : 'AI';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = sender === 'user' ? content : content;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function formatMarkdown(text) {
+            // Simple markdown formatting
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/^- (.*)/gm, '• $1')
+                .replace(/\n/g, '<br>');
+        }
+    </script>
+</body>
+</html>
