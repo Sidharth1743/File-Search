@@ -73,7 +73,7 @@ def extract_metadata(file_path):
     """
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3-pro-preview",
         contents=[
             types.Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type),
             prompt
@@ -212,7 +212,7 @@ def query():
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3-pro-preview",
             contents=f"{question}\n(return your answer in markdown as concise bullet points)\nANSWER:\n",
             config=types.GenerateContentConfig(
                 tools=[
