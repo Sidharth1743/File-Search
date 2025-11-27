@@ -44,7 +44,7 @@ except Exception as e:
 chunking_config = {
     'white_space_config': {
         'max_tokens_per_chunk': 512,
-        'max_overlap_tokens': 10
+        'max_overlap_tokens': 50
     }
 }
 
