@@ -259,7 +259,7 @@ def delete_document(doc_name):
         # # Wait for the delete operation to complete
         # while not operation.done:
         #     time.sleep(1)
-        #     operation = client.operations.get(operation)
+        #     operation = client.operations.get(opration)
         
         return jsonify({
             'success': True, 
@@ -269,4 +269,5 @@ def delete_document(doc_name):
         return jsonify({'error': f'Failed to delete document: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
