@@ -1,235 +1,229 @@
-from google import genai
-from google.genai import types
-import time
+# main.py
+import logging
+import sys
 import os
+from flask import Flask, render_template, request, jsonify
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-import json
-# Load environment variables from .env file
+
+# --- CAMEL & Neo4j Imports ---
+from camel.models import ModelFactory
+from camel.types import ModelPlatformType, ModelType
+from camel.loaders import UnstructuredIO
+from camel.storages import Neo4jGraph
+from unstructured.documents.elements import Text 
+
+# --- Local Imports ---
+from file_search import FileSearchEngine
+from kg_agents import KnowledgeGraphAgent
+from ocr_engine import OCREngine  # <--- Importing your custom engine
+
+# ---------------------------------------------------------------------------
+# 1. SETUP LOGGING
+# ---------------------------------------------------------------------------
+logger = logging.getLogger("SpineDAO_App")
+logger.setLevel(logging.INFO)
+c_handler = logging.StreamHandler(sys.stdout)
+c_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+c_handler.setFormatter(c_format)
+logger.addHandler(c_handler)
+
+logger.info("🚀 SpineDAO Application Starting...")
+
+# ---------------------------------------------------------------------------
+# 2. CONFIGURATION & INIT
+# ---------------------------------------------------------------------------
 load_dotenv()
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Get API key from environment
-api_key = os.getenv('GEMINI_API_KEY')
-if not api_key:
-    raise ValueError("GEMINI_API_KEY not found in .env file")
+# A. Init Your Custom OCR Engine
+try:
+    logger.info("Initializing Custom OCR Engine (Fitz + Gemini Vision)...")
+    # We use the GEMINI_API_KEY from .env
+    ocr_engine = OCREngine(api_key=os.getenv('GEMINI_API_KEY'), use_advanced_model=True)
+    logger.info("✓ OCR Engine Ready")
+except Exception as e:
+    logger.critical(f"✗ Failed to init OCR Engine: {e}", exc_info=True)
 
-# Set the API key as environment variable for the Google client
-os.environ['GEMINI_API_KEY'] = api_key
-from google import genai
-from google.genai import types
-import time
-import os
-import json
+# B. Init File Search
+try:
+    fs_engine = FileSearchEngine(logger=logger)
+    logger.info("✓ Google File Search Engine Ready")
+except Exception as e:
+    logger.critical(f"✗ Failed to init File Search: {e}", exc_info=True)
 
-# Initialize client
-client = genai.Client()
+# C. Init Knowledge Graph
+try:
+    neo4j_db = Neo4jGraph(
+        url=os.getenv("NEO4J_URI"),
+        username=os.getenv("NEO4J_USERNAME"),
+        password=os.getenv("NEO4J_PASSWORD"),
+    )
+    
+    llama_model = ModelFactory.create(
+        model_platform=ModelPlatformType.GROQ,
+        model_type=ModelType.GROQ_LLAMA_3_3_70B,
+        api_key=os.getenv("GROQ_API_KEY"),
+        model_config_dict={"temperature": 0.0}
+    )
+    
+    uio = UnstructuredIO() # Keep for utility, though we use your text
+    kg_agent = KnowledgeGraphAgent(model=llama_model)
+    logger.info("✓ Knowledge Graph Agent Ready")
+except Exception as e:
+    logger.critical(f"✗ Failed to init KG Components: {e}", exc_info=True)
 
-# Create the file search store
-file_search_store = client.file_search_stores.create(config={'display_name': 'abstract-2'})
-print(f"File search store created: {file_search_store.name}\n")
 
-# Chunking configuration
-chunking_config = {
-    'chunking_config': {
-        'white_space_config': {
-            'max_tokens_per_chunk': 512,
-            'max_overlap_tokens': 100
-        }
-    }
-}
+# ---------------------------------------------------------------------------
+# 3. PROCESSING LOGIC
+# ---------------------------------------------------------------------------
 
-def extract_metadata(file_path):
-    """Extract title and ID from PDF using Gemini"""
-    print("Extracting metadata from PDF...")
-    
-    # Upload file to Gemini for analysis
-    uploaded_file = client.files.upload(file=file_path)
-    
-    # Wait for file to be processed
-    print("Processing file...")
-    while uploaded_file.state == "PROCESSING":
-        time.sleep(2)
-        uploaded_file = client.files.get(name=uploaded_file.name)
-    
-    if uploaded_file.state == "FAILED":
-        raise ValueError(f"File processing failed: {uploaded_file.error}")
-    
-    # Prompt to extract metadata
-    prompt = """
-    Analyze this PDF document and extract the following information:
-    1. Title of the document/paper/study
-    2. Any ID present (it could be labeled as Control ID, Abstract ID, Problem Statement ID, Paper ID, Study ID, or any similar identifier)
-    
-    Return your response ONLY as a valid JSON object in this exact format:
-    {"title": "extracted title here", "id": "extracted id here"}
-    
-    If you cannot find the title, use the first heading or main topic.
-    If you cannot find an ID, use "N/A".
-    Do not include any other text, just the JSON.
+def run_advanced_ocr(pdf_path):
     """
-    
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type),
-            prompt
-        ]
-    )
-    
-    # Parse the JSON response
+    Uses your custom OCREngine to process the PDF.
+    """
     try:
-        # Clean the response text
-        response_text = response.text.strip()
-        # Remove markdown code blocks if present
-        if response_text.startswith("```json"):
-            response_text = response_text.replace("```json", "").replace("```", "").strip()
-        elif response_text.startswith("```"):
-            response_text = response_text.replace("```", "").strip()
+        filename = os.path.basename(pdf_path)
+        logger.info(f"👁️ [OCR] Running Advanced OCR on {filename}...")
         
-        metadata = json.loads(response_text)
-        title = metadata.get("title", "Unknown Title")
-        doc_id = metadata.get("id", "N/A")
-        
-        print(f"✓ Extracted - Title: {title}")
-        print(f"✓ Extracted - ID: {doc_id}")
-        
-        # Delete the temporary file after extraction
-        client.files.delete(name=uploaded_file.name)
-        
-        return title, doc_id
-    except Exception as e:
-        print(f"Error parsing metadata: {e}")
-        print(f"Response received: {response.text}")
-        # Clean up file
-        try:
-            client.files.delete(name=uploaded_file.name)
-        except:
-            pass
-        # Fallback to filename
-        return os.path.basename(file_path).replace(".pdf", ""), "N/A"
-
-def upload_doc(file_path):
-    """Upload a document to the file search store with metadata"""
-    file_name = os.path.basename(file_path)
-    
-    # Extract metadata using Gemini
-    title, doc_id = extract_metadata(file_path)
-    
-    print(f"\nUploading to file search store...")
-    
-    # Import the file into the file search store with metadata
-    operation = client.file_search_stores.upload_to_file_search_store(
-        file_search_store_name=file_search_store.name,
-        file=file_path,
-        config={
-            'display_name': title,
-            'chunking_config': chunking_config["chunking_config"],
-            'custom_metadata': [
-                {"key": "title", "string_value": title},
-                {"key": "ID", "string_value": doc_id},
-                {"key": "file_name", "string_value": file_name},
-            ],
-        }
-    )
-    
-    # Wait until import is complete
-    while not operation.done:
-        time.sleep(5)
-        print("Indexing...")
-        operation = client.operations.get(operation)
-    
-    print(f"✓ {file_name} is uploaded and indexed with metadata\n")
-
-def query_documents(prompt):
-    """Query the uploaded documents"""
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"""{prompt}\n(return your answer in markdown as concise bullet points)\nANSWER:\n""",
-        config=types.GenerateContentConfig(
-            tools=[
-                types.Tool(
-                    file_search=types.FileSearch(
-                        file_search_store_names=[file_search_store.name]
-                    )
-                )
-            ]
+        # Call your engine's process_file method
+        # We enable medical_context=True as per your class definition
+        extracted_text = ocr_engine.process_file(
+            pdf_path, 
+            use_preprocessing=True, 
+            enhancement_level="medium", 
+            medical_context=True
         )
-    )
-    return response.text
-
-# Main loop for uploading PDFs
-print("=" * 60)
-print("PDF UPLOAD AND QUERY SYSTEM WITH AUTO-METADATA EXTRACTION")
-print("=" * 60)
-
-uploaded_files = []
-
-while True:
-    file_path = input("\nEnter the PDF file path (or press Enter to finish uploading): ").strip()
-    
-    if not file_path:
-        if len(uploaded_files) == 0:
-            print("No files uploaded. Please upload at least one PDF.")
-            continue
-        else:
-            break
-    
-    # Check if file exists
-    if not os.path.exists(file_path):
-        print(f"Error: File not found at {file_path}")
-        continue
-    
-    # Check if it's a PDF
-    if not file_path.lower().endswith('.pdf'):
-        print("Error: Please upload a PDF file")
-        continue
-    
-    # Upload the document with metadata extraction
-    try:
-        print("\n" + "─" * 60)
-        upload_doc(file_path)
-        uploaded_files.append(file_path)
-        print(f"Total files uploaded: {len(uploaded_files)}")
-        print("─" * 60)
+        
+        # Save to .txt for verification/debugging
+        txt_filename = filename.replace('.pdf', '.txt')
+        txt_path = os.path.join(os.path.dirname(pdf_path), txt_filename)
+        
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(extracted_text)
+            
+        logger.info(f"✅ [OCR] Text extracted and saved to {txt_filename} ({len(extracted_text)} chars)")
+        return txt_path, extracted_text
+        
     except Exception as e:
-        print(f"Error uploading file: {e}")
-        continue
-    
-    # Ask if user wants to upload another file
-    another = input("\nDo you want to upload another PDF? (yes/no): ").strip().lower()
-    if another not in ['yes', 'y']:
-        break
+        logger.error(f"❌ [OCR] Failed: {e}", exc_info=True)
+        return None, None
 
-# Query section
-print("\n" + "=" * 60)
-print(f"All files uploaded! Total: {len(uploaded_files)} PDFs")
-print("=" * 60)
-
-while True:
-    print("\n" + "─" * 60)
-    prompt = input("\nEnter your question (or 'quit' to exit): ").strip()
-    
-    if prompt.lower() in ['quit', 'exit', 'q']:
-        print("Exiting...")
-        break
-    
-    if not prompt:
-        print("Please enter a valid question")
-        continue
-    
-    print("\nSearching documents...\n")
+def process_kg_from_text(text_content):
+    """
+    Feeds the OCR'd text into the Camel Agent
+    """
     try:
-        result = query_documents(prompt)
-        print("ANSWER:")
-        print("─" * 60)
-        print(result)
-        print("─" * 60)
+        logger.info(f"🕸️ [KG] Structuring text for Knowledge Graph...")
+        
+        # Wrap the text in a Camel/Unstructured Text Element
+        element = Text(text_content)
+        element.metadata.filename = "ocr_extracted.txt"
+        
+        # Run the Agent
+        logger.info(f"🕸️ [KG] Extracting Nodes & Relationships (Llama 3.3)...")
+        graph_elements = kg_agent.run(element, parse_graph_elements=True)
+        
+        nodes = len(graph_elements.nodes)
+        rels = len(graph_elements.relationships)
+        
+        # Store in Neo4j
+        logger.info(f"🕸️ [KG] Storing {nodes} nodes and {rels} relationships in Neo4j...")
+        neo4j_db.add_graph_elements(graph_elements=[graph_elements])
+        
+        return True, f"Success: {nodes} Nodes, {rels} Relationships extracted."
+        
     except Exception as e:
-        print(f"Error querying documents: {e}")
-    
-    # Ask if user wants to ask another question
-    another_q = input("\nDo you want to ask another question? (yes/no): ").strip().lower()
-    if another_q not in ['yes', 'y']:
-        print("Exiting...")
-        break
+        logger.error(f"❌ [KG] Error: {e}", exc_info=True)
+        return False, str(e)
 
-print("\nThank you for using the PDF Query System!")
+
+# ---------------------------------------------------------------------------
+# 4. FLASK ROUTES
+# ---------------------------------------------------------------------------
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    try:
+        # 1. Save PDF locally
+        filename = secure_filename(file.filename)
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(pdf_path)
+        logger.info(f"💾 PDF saved: {filename}")
+
+        # 2. Run YOUR Advanced OCR
+        txt_path, text_content = run_advanced_ocr(pdf_path)
+        
+        if not text_content:
+             return jsonify({'error': 'OCR failed to extract text'}), 500
+
+        # 3. Index Original PDF in File Search (For RAG)
+        logger.info("🔍 [Search] Indexing PDF...")
+        title, doc_id = fs_engine.extract_metadata(pdf_path)
+        fs_engine.upload_document(pdf_path, title, doc_id, filename)
+        search_msg = "Indexed in Google File Search."
+
+        # 4. Run KG Agent on the Extracted Text
+        logger.info("🕸️ [KG] Processing Graph...")
+        kg_success, kg_msg = process_kg_from_text(text_content)
+        
+        # Cleanup
+        if os.path.exists(pdf_path): os.remove(pdf_path)
+        if os.path.exists(txt_path): os.remove(txt_path)
+        logger.info("🧹 Cleanup complete.")
+
+        return jsonify({
+            'success': True,
+            'metadata': {'title': title, 'id': doc_id},
+            'status': {
+                'search': search_msg,
+                'kg': kg_msg,
+                'kg_success': kg_success
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Route Error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Copy-paste the rest of your routes (/query, /documents, etc.) from previous main.py
+# They remain exactly the same.
+@app.route('/query', methods=['POST'])
+def query():
+    data = request.get_json()
+    question = data.get('question', '')
+    logger.info(f"❓ Query: {question}")
+    try:
+        answer, citations = fs_engine.query(question)
+        return jsonify({'answer': answer, 'citations': citations})
+    except Exception as e:
+        logger.error(f"❌ Query Error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/documents', methods=['GET'])
+def list_docs():
+    return jsonify({'documents': fs_engine.list_documents()})
+
+@app.route('/delete/<path:doc_name>', methods=['DELETE'])
+def delete_doc(doc_name):
+    try:
+        fs_engine.delete_document(doc_name)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
