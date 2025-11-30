@@ -62,15 +62,15 @@ try:
         password=os.getenv("NEO4J_PASSWORD"),
     )
     
-    llama_model = ModelFactory.create(
-        model_platform=ModelPlatformType.GROQ,
-        model_type=ModelType.GROQ_LLAMA_3_3_70B,
-        api_key=os.getenv("GROQ_API_KEY"),
-        model_config_dict={"temperature": 0.0}
+    gemini = ModelFactory.create(
+        model_platform=ModelPlatformType.GEMINI,
+        model_type=ModelType.GEMINI_2_0_FLASH,
+        api_key=os.getenv("GEMINI_API_KEY"),
+        model_config_dict={"temperature": 0.2}
     )
     
     uio = UnstructuredIO() # Keep for utility, though we use your text
-    kg_agent = KnowledgeGraphAgent(model=llama_model)
+    kg_agent = KnowledgeGraphAgent(model=gemini)
     logger.info("✓ Knowledge Graph Agent Ready")
 except Exception as e:
     logger.critical(f"✗ Failed to init KG Components: {e}", exc_info=True)

@@ -50,7 +50,7 @@ class OCREngine:
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
         
-        model_name = 'gemini-2.0-flash-exp' if use_advanced_model else 'gemini-2.0-flash'
+        model_name = 'gemini-2.0-flash' if use_advanced_model else 'gemini-2.0-flash' #rate limit exceeding - turning off it
         
         return genai.GenerativeModel(
             model_name=model_name,

@@ -63,9 +63,6 @@
    NEO4J_USERNAME=neo4j
    NEO4J_PASSWORD=your_neo4j_password
    
-   # Groq (for Llama model)
-   GROQ_API_KEY=your_groq_api_key
-   
    # Optional
    PORT=5000
    ```
