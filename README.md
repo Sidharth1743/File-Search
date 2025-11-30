@@ -13,50 +13,24 @@
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Interface │    │  Flask Backend  │    │   Neo4j Graph   │
-│  (Drag & Drop)  │◄──►│   (Processing)  │◄──►│  (Relationships)│
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │   OCR Engine    │
-                    │ (Gemini Vision) │
-                    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ File Search API │
-                    │  (Vector Store) │
-                    └─────────────────┘
-```
 
+```mermaid
 graph TD
-    User([👤 User / Clinician]) <--> UI[💻 Web Interface <br/> Flask/HTML]
+    User([User]) -->|Upload PDF| Flask 
     
-    subgraph "Backend Controller (main.py)"
-        UI <--> API[📡 Flask API Routes]
-        API --> OCR[👁️ Custom OCR Engine]
-        API --> RAG[🔍 File Search Engine]
-        API --> KG[🕸️ KG Agent <br/> Camel-AI]
+    subgraph "Pipeline A: Semantic Search"
+        Flask -->|1. Extract Metadata| Meta[Metadata Extractor]
+        Meta -->|2. Index Document| VectorDB[(☁️ Google Vector Store)]
+        User -->|Query| VectorDB
     end
-
-    subgraph "External AI Services"
-        OCR -- "1. Vision Processing" --> Gemini[✨ Google Gemini 2.0]
-        RAG -- "2. Semantic Indexing" --> GeminiStore[(☁️ Google Vector Store)]
-        KG -- "3. Entity Extraction" --> Llama[🦙 Llama-3.3-70B <br/> via Groq]
+    
+    subgraph "Pipeline B: Knowledge Graph"
+        Flask -->|1. Vision OCR| OCR[👁️ OCR Engine]
+        OCR -->|2. Raw Text| Agent[🤖 Camel-AI Agent]
+        Agent -->|3. Extract Entities| GEMINI[GEMINI_2-0-FLASH]
+        GEMINI -->|4. Commit Data| Neo4j[(🧠 Neo4j Graph DB)]
     end
-
-    subgraph "Storage & Retrieval"
-        KG --> Neo4j[(🧠 Neo4j Graph DB)]
-        GeminiStore --> Retrieval[📄 Relevant Chunks]
-        Neo4j --> Insights[🔗 Structured Relationships]
-    end
-
-    Retrieval --> API
-    Insights --> API
-
+```
 ## 📋 Prerequisites
 
 - Python 3.11+
