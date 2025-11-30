@@ -32,6 +32,31 @@
                     └─────────────────┘
 ```
 
+graph TD
+    User([👤 User / Clinician]) <--> UI[💻 Web Interface <br/> Flask/HTML]
+    
+    subgraph "Backend Controller (main.py)"
+        UI <--> API[📡 Flask API Routes]
+        API --> OCR[👁️ Custom OCR Engine]
+        API --> RAG[🔍 File Search Engine]
+        API --> KG[🕸️ KG Agent <br/> Camel-AI]
+    end
+
+    subgraph "External AI Services"
+        OCR -- "1. Vision Processing" --> Gemini[✨ Google Gemini 2.0]
+        RAG -- "2. Semantic Indexing" --> GeminiStore[(☁️ Google Vector Store)]
+        KG -- "3. Entity Extraction" --> Llama[🦙 Llama-3.3-70B <br/> via Groq]
+    end
+
+    subgraph "Storage & Retrieval"
+        KG --> Neo4j[(🧠 Neo4j Graph DB)]
+        GeminiStore --> Retrieval[📄 Relevant Chunks]
+        Neo4j --> Insights[🔗 Structured Relationships]
+    end
+
+    Retrieval --> API
+    Insights --> API
+
 ## 📋 Prerequisites
 
 - Python 3.11+
