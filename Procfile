@@ -1,1 +1,1 @@
-web: uv run gunicorn main:app --bind 0.0.0.0:$PORT --workers 2
+gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120

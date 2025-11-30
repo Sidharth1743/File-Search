@@ -123,7 +123,7 @@ def process_kg_from_text(text_content):
         element.metadata.filename = "ocr_extracted.txt"
         
         # Run the Agent
-        logger.info(f"🕸️ [KG] Extracting Nodes & Relationships (Llama 3.3)...")
+        logger.info(f"🕸️ [KG] Extracting Nodes & Relationships ...")
         graph_elements = kg_agent.run(element, parse_graph_elements=True)
         
         nodes = len(graph_elements.nodes)
