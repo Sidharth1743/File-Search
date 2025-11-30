@@ -13,25 +13,24 @@
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Interface │    │  Flask Backend  │    │   Neo4j Graph   │
-│  (Drag & Drop)  │◄──►│   (Processing)  │◄──►│  (Relationships)│
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │   OCR Engine    │
-                    │ (Gemini Vision) │
-                    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ File Search API │
-                    │  (Vector Store) │
-                    └─────────────────┘
-```
 
+```mermaid
+graph TD
+    User([User]) -->|Upload PDF| Flask 
+    
+    subgraph "Pipeline A: Semantic Search"
+        Flask -->|1. Extract Metadata| Meta[Metadata Extractor]
+        Meta -->|2. Index Document| VectorDB[(☁️ Google Vector Store)]
+        User -->|Query| VectorDB
+    end
+    
+    subgraph "Pipeline B: Knowledge Graph"
+        Flask -->|1. Vision OCR| OCR[👁️ OCR Engine]
+        OCR -->|2. Raw Text| Agent[🤖 Camel-AI Agent]
+        Agent -->|3. Extract Entities| GEMINI[GEMINI_2-0-FLASH]
+        GEMINI -->|4. Commit Data| Neo4j[(🧠 Neo4j Graph DB)]
+    end
+```
 ## 📋 Prerequisites
 
 - Python 3.11+
