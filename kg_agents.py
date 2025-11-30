@@ -1,6 +1,7 @@
 # kg_agents.py
 # ========= Copyright 2023-2024 @ CAMEL-AI.org. All Rights Reserved. =========
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union, Dict, Any
+import re
 
 if TYPE_CHECKING:
     from unstructured.documents.elements import Element
@@ -122,6 +123,7 @@ class KnowledgeGraphAgent(ChatAgent):
         element: "Element",
         parse_graph_elements: bool = False,
         prompt: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Union[str, GraphElement]:
         self.reset()
         self.element = element
@@ -134,7 +136,7 @@ class KnowledgeGraphAgent(ChatAgent):
         content = response.msg.content
 
         if parse_graph_elements:
-            content = self._parse_graph_elements(content)
+            content = self._parse_graph_elements(content, metadata)
 
         return content
 
@@ -148,8 +150,7 @@ class KnowledgeGraphAgent(ChatAgent):
                 and self._validate_node(relationship.obj)
                 and isinstance(relationship.type, str))
 
-    def _parse_graph_elements(self, input_string: str) -> GraphElement:
-        import re
+    def _parse_graph_elements(self, input_string: str, metadata: Optional[Dict[str, Any]] = None) -> GraphElement:
         node_pattern = r"Node\(id='(.*?)', type='(.*?)'\)"
         rel_pattern = (r"Relationship\(subj=Node\(id='(.*?)', type='(.*?)'\), "
                        r"obj=Node\(id='(.*?)', type='(.*?)'\), "
@@ -158,23 +159,43 @@ class KnowledgeGraphAgent(ChatAgent):
         nodes = {}
         relationships = []
 
+        # Prepare Metadata
+        metadata_properties = {'source': 'agent_created'}
+        if metadata:
+            metadata_properties.update(metadata)
+
+        # Extract nodes
         for match in re.finditer(node_pattern, input_string):
             id, type = match.groups()
-            properties = {'source': 'agent_created'}
+            
+            # --- FIXED PROPERTIES ---
+            # 1. 'name' is essential for Visualization captions (KEEP)
+            properties = {'name': id}
+            
+            # 2. Add metadata (Title, doc_id, filename)
+            properties.update(metadata_properties)
+            
+            # Note: We removed 'entity_id' to avoid duplicates.
+            # 'id' is automatically added by the database storage layer.
+            
             if id not in nodes:
                 node = Node(id=id, type=type, properties=properties)
                 if self._validate_node(node):
                     nodes[id] = node
 
+        # Extract relationships
         for match in re.finditer(rel_pattern, input_string):
             groups = match.groups()
             if len(groups) == 6:
-                subj_id, subj_type, obj_id, obj_type, rel_type, timestamp = (
-                    groups)
+                subj_id, subj_type, obj_id, obj_type, rel_type, timestamp = groups
             else:
                 subj_id, subj_type, obj_id, obj_type, rel_type = groups
                 timestamp = None
+            
             properties = {'source': 'agent_created'}
+            if metadata:
+                properties.update(metadata)
+            
             if subj_id in nodes and obj_id in nodes:
                 subj = nodes[subj_id]
                 obj = nodes[obj_id]

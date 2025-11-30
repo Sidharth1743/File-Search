@@ -16,7 +16,7 @@ from unstructured.documents.elements import Text
 # --- Local Imports ---
 from file_search import FileSearchEngine
 from kg_agents import KnowledgeGraphAgent
-from ocr_engine import OCREngine  # <--- Importing your custom engine
+from ocr_engine import OCREngine
 
 # ---------------------------------------------------------------------------
 # 1. SETUP LOGGING
@@ -38,42 +38,46 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# A. Init Your Custom OCR Engine
+# Safe Init
+fs_engine = None
+ocr_engine = None
+kg_agent = None
+neo4j_db = None
+
 try:
-    logger.info("Initializing Custom OCR Engine (Fitz + Gemini Vision)...")
-    # We use the GEMINI_API_KEY from .env
+    logger.info("Initializing Custom OCR Engine...")
     ocr_engine = OCREngine(api_key=os.getenv('GEMINI_API_KEY'), use_advanced_model=True)
     logger.info("✓ OCR Engine Ready")
 except Exception as e:
-    logger.critical(f"✗ Failed to init OCR Engine: {e}", exc_info=True)
+    logger.error(f"⚠️ OCR Engine failed: {e}")
 
-# B. Init File Search
 try:
+    logger.info("Initializing File Search...")
     fs_engine = FileSearchEngine(logger=logger)
-    logger.info("✓ Google File Search Engine Ready")
+    logger.info("✓ File Search Ready")
 except Exception as e:
-    logger.critical(f"✗ Failed to init File Search: {e}", exc_info=True)
+    logger.error(f"⚠️ File Search failed: {e}")
 
-# C. Init Knowledge Graph
 try:
+    logger.info("Initializing Neo4j & Llama...")
     neo4j_db = Neo4jGraph(
         url=os.getenv("NEO4J_URI"),
         username=os.getenv("NEO4J_USERNAME"),
         password=os.getenv("NEO4J_PASSWORD"),
     )
     
-    gemini = ModelFactory.create(
-        model_platform=ModelPlatformType.GEMINI,
-        model_type=ModelType.GEMINI_2_0_FLASH,
-        api_key=os.getenv("GEMINI_API_KEY"),
-        model_config_dict={"temperature": 0.2}
+    llama_model = ModelFactory.create(
+        model_platform=ModelPlatformType.GROQ,
+        model_type=ModelType.GROQ_LLAMA_3_3_70B,
+        api_key=os.getenv("GROQ_API_KEY"),
+        model_config_dict={"temperature": 0.0}
     )
     
-    uio = UnstructuredIO() # Keep for utility, though we use your text
-    kg_agent = KnowledgeGraphAgent(model=gemini)
-    logger.info("✓ Knowledge Graph Agent Ready")
+    uio = UnstructuredIO() 
+    kg_agent = KnowledgeGraphAgent(model=llama_model)
+    logger.info("✓ KG Agent Ready")
 except Exception as e:
-    logger.critical(f"✗ Failed to init KG Components: {e}", exc_info=True)
+    logger.error(f"⚠️ KG Agent failed: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -81,50 +85,33 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 
 def run_advanced_ocr(pdf_path):
-    """
-    Uses your custom OCREngine to process the PDF.
-    """
     try:
         filename = os.path.basename(pdf_path)
         logger.info(f"👁️ [OCR] Running Advanced OCR on {filename}...")
-        
-        # Call your engine's process_file method
-        # We enable medical_context=True as per your class definition
         extracted_text = ocr_engine.process_file(
             pdf_path, 
             use_preprocessing=True, 
             enhancement_level="medium", 
             medical_context=True
         )
-        
-        # Save to .txt for verification/debugging
-        txt_filename = filename.replace('.pdf', '.txt')
-        txt_path = os.path.join(os.path.dirname(pdf_path), txt_filename)
-        
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(extracted_text)
-            
-        logger.info(f"✅ [OCR] Text extracted and saved to {txt_filename} ({len(extracted_text)} chars)")
-        return txt_path, extracted_text
-        
+        return extracted_text
     except Exception as e:
         logger.error(f"❌ [OCR] Failed: {e}", exc_info=True)
-        return None, None
+        return None
 
-def process_kg_from_text(text_content):
+def process_kg_from_text(text_content, metadata):
     """
-    Feeds the OCR'd text into the Camel Agent
+    Feeds text to Camel Agent and injects metadata into nodes/rels
     """
     try:
         logger.info(f"🕸️ [KG] Structuring text for Knowledge Graph...")
+        logger.info(f"    - Attaching metadata: {metadata}")
         
-        # Wrap the text in a Camel/Unstructured Text Element
+        # Wrap text in Element
         element = Text(text_content)
-        element.metadata.filename = "ocr_extracted.txt"
         
-        # Run the Agent
-        logger.info(f"🕸️ [KG] Extracting Nodes & Relationships ...")
-        graph_elements = kg_agent.run(element, parse_graph_elements=True)
+        # Run Agent with Metadata
+        graph_elements = kg_agent.run(element, parse_graph_elements=True, metadata=metadata)
         
         nodes = len(graph_elements.nodes)
         rels = len(graph_elements.relationships)
@@ -133,7 +120,7 @@ def process_kg_from_text(text_content):
         logger.info(f"🕸️ [KG] Storing {nodes} nodes and {rels} relationships in Neo4j...")
         neo4j_db.add_graph_elements(graph_elements=[graph_elements])
         
-        return True, f"Success: {nodes} Nodes, {rels} Relationships extracted."
+        return True, f"Success: {nodes} Nodes, {rels} Rels extracted."
         
     except Exception as e:
         logger.error(f"❌ [KG] Error: {e}", exc_info=True)
@@ -141,7 +128,7 @@ def process_kg_from_text(text_content):
 
 
 # ---------------------------------------------------------------------------
-# 4. FLASK ROUTES
+# 4. ROUTES
 # ---------------------------------------------------------------------------
 @app.route('/')
 def index():
@@ -149,6 +136,9 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    if not ocr_engine or not fs_engine or not kg_agent:
+        return jsonify({'error': 'System components failed to initialize.'}), 500
+
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
@@ -161,28 +151,33 @@ def upload_file():
         filename = secure_filename(file.filename)
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(pdf_path)
-        logger.info(f"💾 PDF saved: {filename}")
-
-        # 2. Run YOUR Advanced OCR
-        txt_path, text_content = run_advanced_ocr(pdf_path)
         
+        # 2. Run OCR
+        text_content = run_advanced_ocr(pdf_path)
         if not text_content:
-             return jsonify({'error': 'OCR failed to extract text'}), 500
+             return jsonify({'error': 'OCR failed'}), 500
 
-        # 3. Index Original PDF in File Search (For RAG)
+        # 3. Index & Get Metadata (Title, ID)
         logger.info("🔍 [Search] Indexing PDF...")
         title, doc_id = fs_engine.extract_metadata(pdf_path)
         fs_engine.upload_document(pdf_path, title, doc_id, filename)
         search_msg = "Indexed in Google File Search."
 
-        # 4. Run KG Agent on the Extracted Text
+        # 4. Prepare Metadata for KG
+        # This dict will be attached to every Node/Rel in Neo4j
+        kg_metadata = {
+            'document_title': title,
+            'document_id': doc_id,
+            'file_name': filename,
+            'source': 'SpineDAO_Pipeline' # Overwrite the default source
+        }
+
+        # 5. Run KG Agent
         logger.info("🕸️ [KG] Processing Graph...")
-        kg_success, kg_msg = process_kg_from_text(text_content)
+        kg_success, kg_msg = process_kg_from_text(text_content, kg_metadata)
         
         # Cleanup
         if os.path.exists(pdf_path): os.remove(pdf_path)
-        if os.path.exists(txt_path): os.remove(txt_path)
-        logger.info("🧹 Cleanup complete.")
 
         return jsonify({
             'success': True,
@@ -198,26 +193,26 @@ def upload_file():
         logger.error(f"❌ Route Error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-# Copy-paste the rest of your routes (/query, /documents, etc.) from previous main.py
-# They remain exactly the same.
 @app.route('/query', methods=['POST'])
 def query():
     data = request.get_json()
     question = data.get('question', '')
-    logger.info(f"❓ Query: {question}")
+    if not fs_engine: return jsonify({'error': 'Search engine down'}), 500
+    
     try:
         answer, citations = fs_engine.query(question)
         return jsonify({'answer': answer, 'citations': citations})
     except Exception as e:
-        logger.error(f"❌ Query Error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/documents', methods=['GET'])
 def list_docs():
+    if not fs_engine: return jsonify({'documents': []})
     return jsonify({'documents': fs_engine.list_documents()})
 
 @app.route('/delete/<path:doc_name>', methods=['DELETE'])
 def delete_doc(doc_name):
+    if not fs_engine: return jsonify({'error': 'Search engine down'}), 500
     try:
         fs_engine.delete_document(doc_name)
         return jsonify({'success': True})

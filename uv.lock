@@ -589,7 +589,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.4.0" },
     { name = "pymupdf", specifier = ">=1.26.6" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "unstructured", extras = ["pdf", "txt"], specifier = ">=0.18.21" },
+    { name = "unstructured", extras = ["pdf"], specifier = ">=0.18.21" },
 ]
 
 [[package]]
