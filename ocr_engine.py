@@ -2,7 +2,7 @@
 Enhanced OCR Engine for Historical Medical Documents
 Handles image preprocessing and text extraction from PDFs and images
 """
-
+#ocr_engine.py
 import os
 import google.generativeai as genai
 import PIL.Image
@@ -18,21 +18,27 @@ class OCREngine:
     Enhanced OCR system optimized for old medical documents with advanced preprocessing.
     """
     
-    def __init__(self, api_key: Optional[str] = None, use_advanced_model: bool = True):
+    def __init__(self, api_key: Optional[str] = None, use_advanced_model: bool = True, logger=None):
         """
         Initialize OCR engine with Gemini API.
-        
+
         Args:
             api_key: Google API key (if None, reads from GOOGLE_API_KEY env var)
             use_advanced_model: Use gemini-2.0-flash-exp for better accuracy
+            logger: Optional logger instance for consistent logging
         """
         self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
         if not self.api_key:
             raise ValueError("GOOGLE_API_KEY not found in environment variables or provided")
-        
+
+        self.logger = logger
         genai.configure(api_key=self.api_key)
         self.model = self._configure_model(use_advanced_model)
-        print(f"✅ OCR Engine initialized with model: {self.model.model_name}")
+
+        if self.logger:
+            self.logger.info(f"✅ OCR Engine initialized with model: {self.model.model_name}")
+        else:
+            print(f"✅ OCR Engine initialized with model: {self.model.model_name}")
     
     def _configure_model(self, use_advanced_model: bool):
         """Configure Gemini model with optimal settings."""
@@ -50,7 +56,7 @@ class OCREngine:
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
         
-        model_name = 'gemini-2.0-flash' if use_advanced_model else 'gemini-2.0-flash' #rate limit exceeding - turning off it
+        model_name = 'gemini-2.5-flash' if use_advanced_model else 'gemini-2.0-flash' #rate limit exceeding - turning off it
         
         return genai.GenerativeModel(
             model_name=model_name,
@@ -122,13 +128,16 @@ class OCREngine:
                 angle = np.degrees(theta) - 90
                 if abs(angle) < 45:
                     angles.append(angle)
-            
+
             if angles:
                 median_angle = np.median(angles)
                 if abs(median_angle) > 0.5:
-                    print(f"  🔄 Detected skew: {median_angle:.2f}°, correcting...")
+                    if hasattr(self, 'logger') and self.logger:
+                        self.logger.info(f"  🔄 Detected skew: {median_angle:.2f}°, correcting...")
+                    else:
+                        print(f"  🔄 Detected skew: {median_angle:.2f}°, correcting...")
                     return image.rotate(median_angle, expand=True, fillcolor='white')
-        
+
         return image
     
     def _get_medical_prompt(self) -> str:
@@ -185,15 +194,21 @@ Begin extraction:"""
             original_image = image.copy()
             
             if use_preprocessing:
-                print("  🔧 Preprocessing image...")
+                if self.logger:
+                    self.logger.info("  🔧 Preprocessing image...")
+                else:
+                    print("  🔧 Preprocessing image...")
                 image = self.detect_and_deskew(image)
                 image = self.preprocess_image(image, enhancement_level)
-                
+
                 if save_debug_images and page_num is not None:
                     debug_dir = "debug_images"
                     os.makedirs(debug_dir, exist_ok=True)
                     image.save(f"{debug_dir}/page_{page_num}_preprocessed.png")
-                    print(f"  💾 Debug image saved: {debug_dir}/page_{page_num}_preprocessed.png")
+                    if self.logger:
+                        self.logger.info(f"  💾 Debug image saved: {debug_dir}/page_{page_num}_preprocessed.png")
+                    else:
+                        print(f"  💾 Debug image saved: {debug_dir}/page_{page_num}_preprocessed.png")
             
             prompt = self._get_medical_prompt() if medical_context else self._get_standard_prompt()
             
@@ -203,19 +218,28 @@ Begin extraction:"""
             extracted_text = response.text if response.text else ""
             
             if not extracted_text.strip() and use_preprocessing:
-                print("  ⚠️  Empty result with preprocessing, retrying with original image...")
+                if self.logger:
+                    self.logger.warning("  ⚠️  Empty result with preprocessing, retrying with original image...")
+                else:
+                    print("  ⚠️  Empty result with preprocessing, retrying with original image...")
                 retry_response = self.model.generate_content([prompt, original_image], stream=True)
                 retry_response.resolve()
                 extracted_text = retry_response.text if retry_response.text else ""
-            
+
             if not extracted_text.strip():
-                print("  ❌ WARNING: No text extracted from this image!")
-                return "[No text could be extracted from this page]"
+                if self.logger:
+                    self.logger.warning("  ❌ WARNING: No text extracted from this image!")
+                else:
+                    print("  ❌ WARNING: No text extracted from this image!")
+                return "[No text could be extracted from this image]"
             
             return extracted_text
             
         except Exception as e:
-            print(f"  ❌ ERROR during OCR API call: {e}")
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.error(f"  ❌ ERROR during OCR API call: {e}")
+            else:
+                print(f"  ❌ ERROR during OCR API call: {e}")
             import traceback
             traceback.print_exc()
             return f"[Error during image processing: {e}]"
@@ -249,32 +273,45 @@ Begin extraction:"""
         try:
             doc = fitz.open(pdf_path)
             total_pages = doc.page_count
-            print(f"📄 Processing PDF with {total_pages} pages...")
-            print(f"   Settings: DPI={'300' if high_dpi else '200'}, Enhancement={enhancement_level}, Preprocessing={use_preprocessing}")
-            
+            if self.logger:
+                self.logger.info(f"📄 Processing PDF with {total_pages} pages...")
+                self.logger.info(f"   Settings: DPI={'300' if high_dpi else '200'}, Enhancement={enhancement_level}, Preprocessing={use_preprocessing}")
+            else:
+                print(f"📄 Processing PDF with {total_pages} pages...")
+                print(f"   Settings: DPI={'300' if high_dpi else '200'}, Enhancement={enhancement_level}, Preprocessing={use_preprocessing}")
+
             for page_num in range(total_pages):
-                print(f"\n  📖 Page {page_num + 1}/{total_pages}")
+                if self.logger:
+                    self.logger.info(f"\n  📖 Page {page_num + 1}/{total_pages}")
+                else:
+                    print(f"\n  📖 Page {page_num + 1}/{total_pages}")
                 page = doc.load_page(page_num)
-                
+
                 native_text = ""
                 if try_native_text:
                     native_text = page.get_text().strip()
                     if native_text and len(native_text) > 100:
-                        print(f"  ✅ Extracted native PDF text (~{len(native_text)} characters)")
+                        if self.logger:
+                            self.logger.info(f"  ✅ Extracted native PDF text (~{len(native_text)} characters)")
+                        else:
+                            print(f"  ✅ Extracted native PDF text (~{len(native_text)} characters)")
                         all_text += f"\n\n{'='*60}\n### Page {page_num + 1}\n{'='*60}\n\n{native_text}"
                         continue
-                
-                print(f"  🔍 No native text found, using OCR...")
-                
+
+                if self.logger:
+                    self.logger.info(f"  🔍 No native text found, using OCR...")
+                else:
+                    print(f"  🔍 No native text found, using OCR...")
+
                 dpi = 300 if high_dpi else 200
                 pix = page.get_pixmap(dpi=dpi)
                 img = PIL.Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                
+
                 if save_debug_images:
                     debug_dir = "debug_images"
                     os.makedirs(debug_dir, exist_ok=True)
                     img.save(f"{debug_dir}/page_{page_num + 1}_original.png")
-                
+
                 page_text = self.extract_text_from_image(
                     img,
                     use_preprocessing=use_preprocessing,
@@ -283,19 +320,28 @@ Begin extraction:"""
                     save_debug_images=save_debug_images,
                     page_num=page_num + 1
                 )
-                
+
                 all_text += f"\n\n{'='*60}\n### Page {page_num + 1}\n{'='*60}\n\n{page_text}"
-                
-                print(f"  ✅ Extracted ~{len(page_text)} characters")
-                
+
+                if self.logger:
+                    self.logger.info(f"  ✅ Extracted ~{len(page_text)} characters")
+                else:
+                    print(f"  ✅ Extracted ~{len(page_text)} characters")
+
                 import time
                 time.sleep(1)
-            
+
             doc.close()
-            print(f"\n✅ PDF processing complete! Total characters: {len(all_text)}")
+            if self.logger:
+                self.logger.info(f"\n✅ PDF processing complete! Total characters: {len(all_text)}")
+            else:
+                print(f"\n✅ PDF processing complete! Total characters: {len(all_text)}")
             return all_text
         except Exception as e:
-            print(f"ERROR during PDF processing: {e}")
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.error(f"ERROR during PDF processing: {e}")
+            else:
+                print(f"ERROR during PDF processing: {e}")
             import traceback
             traceback.print_exc()
             return f"An error occurred during PDF processing: {e}"
@@ -322,14 +368,17 @@ Begin extraction:"""
             Extracted text
         """
         try:
-            print(f"🖼️  Processing image: {image_path}")
+            if self.logger:
+                self.logger.info(f"🖼️  Processing image: {image_path}")
+            else:
+                print(f"🖼️  Processing image: {image_path}")
             img = PIL.Image.open(image_path)
-            
+
             if save_debug_images:
                 debug_dir = "debug_images"
                 os.makedirs(debug_dir, exist_ok=True)
                 img.save(f"{debug_dir}/original_image.png")
-            
+
             text = self.extract_text_from_image(
                 img,
                 use_preprocessing=use_preprocessing,
@@ -338,10 +387,16 @@ Begin extraction:"""
                 save_debug_images=save_debug_images,
                 page_num=0
             )
-            print("✅ Image processing complete!")
+            if self.logger:
+                self.logger.info("✅ Image processing complete!")
+            else:
+                print("✅ Image processing complete!")
             return text
         except Exception as e:
-            print(f"ERROR during image processing: {e}")
+            if hasattr(self, 'logger') and self.logger:
+                self.logger.error(f"ERROR during image processing: {e}")
+            else:
+                print(f"ERROR during image processing: {e}")
             import traceback
             traceback.print_exc()
             return f"An error occurred: {e}"

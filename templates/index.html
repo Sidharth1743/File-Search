@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SpineDAO Intelligence</title>
+    <title>ISSG</title>
     <style>
         /* --------------------------------------------------------------
            RESET & GLOBAL
@@ -143,6 +143,45 @@
             background: #eef7ff;
             color: #0c4a6e;
             border: 1px solid #c6e0f5;
+        }
+
+        /* File Preview */
+        .file-preview-list {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+            font-size: 0.85em;
+        }
+
+        .file-preview-item {
+            padding: 6px 8px;
+            background: #f9f9f9;
+            margin: 4px 0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-icon {
+            color: #dc3545;
+            font-size: 1.1em;
+        }
+
+        /* Progress Bar */
+        .progress-wrapper {
+            background: #e0e0e0;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s;
         }
 
         /* --------------------------------------------------------------
@@ -369,23 +408,122 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>SpineDAO Intelligence</h1>
+            <h1>ISSG Knowledge Base</h1>
             <p>Knowledge Graph Extraction & RAG Search Engine</p>
         </div>
 
         <div class="upload-section">
             <h3 style="margin-bottom: 20px; color: #333;">📄 Add Data</h3>
-            <div class="upload-box" id="uploadBox">
-                <span class="upload-icon">📤</span>
-                <h4>Drop PDF here</h4>
-                <p style="color: #666; margin-top: 10px; font-size: 0.85em;">
-                    Auto-indexes for search & extracts entities to Neo4j
-                </p>
-                <input type="file" id="fileInput" accept=".pdf" style="display:none">
-                <button class="btn" onclick="document.getElementById('fileInput').click()">
-                    Select File
-                </button>
+            
+            <!-- Hierarchical Upload Selection -->
+            <div style="background: white; border: 1px solid #e1e1e1; border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                
+                <!-- Step 1: Document Type Selection -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">1. Select Document Type</h4>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn doc-type-btn" id="abstractsBtn" onclick="selectDocType('abstracts')" 
+                                style="flex: 1; background: #f8f9fa; color: #333; border: 2px solid transparent;">
+                            📋 Abstracts
+                        </button>
+                        <button class="btn doc-type-btn" id="manuscriptsBtn" onclick="selectDocType('manuscripts')"
+                                style="flex: 1; background: #f8f9fa; color: #333; border: 2px solid transparent;">
+                            📄 Manuscripts
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Upload Method Selection -->
+                <div id="uploadMethodSection" style="display: none; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">2. Choose Upload Method</h4>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn upload-method-btn" id="singleFileBtn" onclick="selectUploadMethod('single')"
+                                style="flex: 1; background: #f8f9fa; color: #333; border: 2px solid transparent;">
+                            📄 Single File
+                        </button>
+                        <button class="btn upload-method-btn" id="bulkFolderBtn" onclick="selectUploadMethod('bulk')"
+                                style="flex: 1; background: #f8f9fa; color: #333; border: 2px solid transparent;">
+                            📁 Bulk Folder
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: File Upload Area (Single File) -->
+                <div id="singleFileSection" style="display: none; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">3. Upload PDF File</h4>
+                    <div class="upload-box" id="uploadBox">
+                        <span class="upload-icon">📤</span>
+                        <h4>Drop PDF here</h4>
+                        <p style="color: #666; margin-top: 10px; font-size: 0.85em;">
+                            Auto-indexes for search & extracts entities to Neo4j
+                        </p>
+                        <input type="file" id="fileInput" accept=".pdf" style="display:none">
+                        <button class="btn" onclick="document.getElementById('fileInput').click()">
+                            Select File
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Folder Upload Area (Bulk) -->
+                <div id="bulkFolderSection" style="display: none; margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">3. Select Folder with PDFs</h4>
+                    
+                    <div class="upload-box" id="folderUploadBox" onclick="document.getElementById('folderInput').click()" style="padding: 30px 20px;">
+                        <span class="upload-icon">📁</span>
+                        <h4>Click to Select Folder</h4>
+                        <p style="color: #666; margin-top: 10px; font-size: 0.85em;">
+                            Choose a folder containing PDF files from your computer
+                        </p>
+                        <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+                        <button class="btn" onclick="document.getElementById('folderInput').click(); event.stopPropagation();">
+                            Browse Folder
+                        </button>
+                    </div>
+
+                    <!-- File Preview for Bulk Upload -->
+                    <div id="folderFilePreview" style="display: none; margin-top: 15px; padding: 12px; background: #e8f5e9; border-radius: 6px;">
+                        <div style="font-weight: 600; margin-bottom: 8px; color: #2e7d32;">
+                            <span id="folderFileCount">0</span> PDF files selected
+                        </div>
+                        <div class="file-preview-list" id="folderFileList"></div>
+                    </div>
+
+                    <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 6px; font-size: 0.85em; color: #856404;">
+                        <strong>💡 Tip:</strong> Select a folder containing only PDF files for best results. The browser will upload all PDFs in the selected folder.
+                    </div>
+                </div>
+
+                <!-- Step 4: Main Upload Button -->
+                <div id="mainUploadSection" style="display: none;">
+                    <h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">4. Start Upload</h4>
+                    <button class="btn" id="mainUploadBtn" onclick="executeUpload()" 
+                            style="width: 100%; background: #28a745; font-size: 1.1em; padding: 12px;">
+                        🚀 Start Upload to <span id="uploadTarget">Store</span>
+                    </button>
+                </div>
+
+                <!-- Progress Tracking -->
+                <div id="bulkProgress" style="display: none; margin-top: 15px;">
+                    <div style="background: #f0f0f0; border-radius: 8px; padding: 15px;">
+                        <div style="font-size: 0.9em; margin-bottom: 8px; font-weight: 600;">
+                            <span id="progressText">Preparing upload...</span>
+                        </div>
+                        <div class="progress-wrapper">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                        <div id="progressDetails" style="font-size: 0.8em; color: #666; margin-top: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- Store Status -->
+                <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button class="btn" onclick="loadStoreStatus()" style="width: 100%; background: #6c757d; font-size: 0.85em;">
+                        📊 Check Store Status
+                    </button>
+                    <div id="storeStatus" style="display: none; margin-top: 10px; font-size: 0.8em;"></div>
+                </div>
             </div>
+            
             <div id="statusMessage" class="status-message"></div>
         </div>
 
@@ -415,15 +553,32 @@
                 <h2>Library</h2>
                 <p id="docCount" style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">0 documents</p>
             </div>
-            <div class="documents-list" id="documentsList">
+            <!-- Store Switching Controls -->
+            <div style="margin-bottom: 15px; padding: 0 10px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                    <button class="btn" onclick="loadDocuments('abstracts')" style="flex: 1; background: #f8f9fa; color: #333; font-size: 0.85em; padding: 6px;" title="Show Abstracts">
+                        📋 Abstracts
+                    </button>
+                    <button class="btn" onclick="loadDocuments('manuscripts')" style="flex: 1; background: #f8f9fa; color: #333; font-size: 0.85em; padding: 6px;" title="Show Manuscripts">
+                        📄 Manuscripts
+                    </button>
                 </div>
+            </div>
+            <div class="documents-list" id="documentsList">
+            </div>
         </div>
     </div>
 
     <script>
+        // Global state for hierarchical upload
+        let selectedDocType = null;
+        let selectedUploadMethod = null;
+        let selectedFolderFiles = [];
+
         // DOM Elements
         const uploadBox = document.getElementById('uploadBox');
         const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
         const statusMessage = document.getElementById('statusMessage');
         const documentsList = document.getElementById('documentsList');
         const chatMessages = document.getElementById('chatMessages');
@@ -431,32 +586,152 @@
         const queryBtn = document.getElementById('queryBtn');
         const docCount = document.getElementById('docCount');
 
-        // Initial Load
-        loadDocuments();
+        // Initial Load - show abstracts by default
+        loadDocuments('abstracts');
 
         // ------------------------------------------------------------
-        // DRAG & DROP HANDLING
+        // HIERARCHICAL UPLOAD FLOW
         // ------------------------------------------------------------
-        uploadBox.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadBox.classList.add('dragging');
+
+        function selectDocType(type) {
+            selectedDocType = type;
+            
+            // Update button styles
+            document.getElementById('abstractsBtn').style.borderColor = type === 'abstracts' ? '#28a745' : 'transparent';
+            document.getElementById('abstractsBtn').style.backgroundColor = type === 'abstracts' ? '#e8f5e8' : '#f8f9fa';
+            document.getElementById('manuscriptsBtn').style.borderColor = type === 'manuscripts' ? '#28a745' : 'transparent';
+            document.getElementById('manuscriptsBtn').style.backgroundColor = type === 'manuscripts' ? '#e8f5e8' : '#f8f9fa';
+            
+            // Show upload method selection
+            document.getElementById('uploadMethodSection').style.display = 'block';
+            selectedUploadMethod = null;
+            
+            // Hide subsequent sections
+            document.getElementById('singleFileSection').style.display = 'none';
+            document.getElementById('bulkFolderSection').style.display = 'none';
+            document.getElementById('mainUploadSection').style.display = 'none';
+            
+            showStatus(`Selected ${type === 'abstracts' ? '📋 Abstracts' : '📄 Manuscripts'}`, 'info');
+        }
+
+        function selectUploadMethod(method) {
+            selectedUploadMethod = method;
+            
+            // Update button styles
+            document.getElementById('singleFileBtn').style.borderColor = method === 'single' ? '#28a745' : 'transparent';
+            document.getElementById('singleFileBtn').style.backgroundColor = method === 'single' ? '#e8f5e8' : '#f8f9fa';
+            document.getElementById('bulkFolderBtn').style.borderColor = method === 'bulk' ? '#28a745' : 'transparent';
+            document.getElementById('bulkFolderBtn').style.backgroundColor = method === 'bulk' ? '#e8f5e8' : '#f8f9fa';
+            
+            // Show appropriate upload section
+            if (method === 'single') {
+                document.getElementById('singleFileSection').style.display = 'block';
+                document.getElementById('bulkFolderSection').style.display = 'none';
+            } else {
+                document.getElementById('singleFileSection').style.display = 'none';
+                document.getElementById('bulkFolderSection').style.display = 'block';
+            }
+            
+            // Show main upload button
+            document.getElementById('mainUploadSection').style.display = 'block';
+            document.getElementById('uploadTarget').textContent = `${selectedDocType} store`;
+            
+            showStatus(`Selected ${method === 'single' ? '📄 Single File' : '📁 Bulk Folder'} upload`, 'info');
+        }
+
+        function executeUpload() {
+            if (!selectedDocType || !selectedUploadMethod) {
+                showStatus('Please complete the selection steps first', 'error');
+                return;
+            }
+
+            if (selectedUploadMethod === 'single') {
+                handleFileUpload();
+            } else {
+                startBulkUpload();
+            }
+        }
+
+        // ------------------------------------------------------------
+        // FOLDER INPUT HANDLING (Browser API)
+        // ------------------------------------------------------------
+        folderInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            selectedFolderFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            
+            const folderFilePreview = document.getElementById('folderFilePreview');
+            const folderFileCount = document.getElementById('folderFileCount');
+            const folderFileList = document.getElementById('folderFileList');
+            
+            if (selectedFolderFiles.length > 0) {
+                folderFileCount.textContent = selectedFolderFiles.length;
+                folderFileList.innerHTML = selectedFolderFiles.slice(0, 10).map(f => `
+                    <div class="file-preview-item">
+                        <span class="file-icon">📄</span>
+                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${f.webkitRelativePath || f.name}
+                        </span>
+                    </div>
+                `).join('');
+                
+                if (selectedFolderFiles.length > 10) {
+                    folderFileList.innerHTML += `
+                        <div style="text-align: center; color: #666; font-style: italic; padding: 8px;">
+                            ... and ${selectedFolderFiles.length - 10} more files
+                        </div>
+                    `;
+                }
+                
+                folderFilePreview.style.display = 'block';
+                showStatus(`✅ ${selectedFolderFiles.length} PDF files ready for upload`, 'success');
+            } else {
+                folderFilePreview.style.display = 'none';
+                showStatus('⚠️ No PDF files found in the selected folder', 'error');
+            }
         });
-        uploadBox.addEventListener('dragleave', () => {
-            uploadBox.classList.remove('dragging');
-        });
-        uploadBox.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadBox.classList.remove('dragging');
-            if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files[0]);
-        });
+
+        // ------------------------------------------------------------
+        // DRAG & DROP HANDLING (for single file mode)
+        // ------------------------------------------------------------
+        if (uploadBox) {
+            uploadBox.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                if (selectedUploadMethod === 'single') {
+                    uploadBox.classList.add('dragging');
+                }
+            });
+            uploadBox.addEventListener('dragleave', () => {
+                uploadBox.classList.remove('dragging');
+            });
+            uploadBox.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadBox.classList.remove('dragging');
+                if (selectedUploadMethod === 'single' && e.dataTransfer.files.length) {
+                    const file = e.dataTransfer.files[0];
+                    handleFileUpload(file);
+                }
+            });
+        }
+        
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) handleFileUpload(e.target.files[0]);
+            if (e.target.files.length && selectedUploadMethod === 'single') {
+                handleFileUpload(e.target.files[0]);
+            }
         });
 
         // ------------------------------------------------------------
-        // FILE UPLOAD LOGIC (Dual Pipeline)
+        // SINGLE FILE UPLOAD LOGIC
         // ------------------------------------------------------------
-        async function handleFileUpload(file) {
+        async function handleFileUpload(file = null) {
+            if (!file) {
+                const fileInput = document.getElementById('fileInput');
+                if (fileInput.files.length === 0) {
+                    fileInput.click();
+                    return;
+                }
+                file = fileInput.files[0];
+            }
+
             if (!file.name.toLowerCase().endsWith('.pdf')) {
                 showStatus('Please upload a PDF file', 'error');
                 return;
@@ -465,9 +740,8 @@
             const formData = new FormData();
             formData.append('file', file);
 
-            // Show progressive status
             showStatus(`
-                <b>Processing "${file.name}"...</b><br>
+                <b>Processing "${file.name}" for ${selectedDocType} store...</b><br>
                 <div style="margin-top:8px; display:flex; gap:10px; flex-direction:column;">
                     <span>1. Indexing for Search (Gemini)...</span>
                     <span>2. Extracting Knowledge Graph (Neo4j)...</span>
@@ -482,7 +756,6 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // Construct detailed success message based on backend response
                     let msg = `<b>✓ Processing Complete</b><br>`;
                     msg += `<div style="margin-top:8px; line-height:1.6;">`;
                     msg += `📄 ${data.status.search}<br>`;
@@ -495,8 +768,9 @@
                     msg += `</div>`;
                     
                     showStatus(msg, data.status.kg_success ? 'success' : 'info');
-                    loadDocuments(); // Refresh sidebar
-                    fileInput.value = ''; // Reset input
+                    loadDocuments();
+                    fileInput.value = '';
+                    resetUploadFlow();
                 } else {
                     showStatus(`Error: ${data.error}`, 'error');
                 }
@@ -508,13 +782,121 @@
         }
 
         // ------------------------------------------------------------
+        // BULK FOLDER UPLOAD LOGIC
+        // ------------------------------------------------------------
+        async function startBulkUpload() {
+            if (selectedFolderFiles.length === 0) {
+                showStatus('⚠️ Please select a folder with PDF files first', 'error');
+                return;
+            }
+
+            const bulkProgress = document.getElementById('bulkProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressDetails = document.getElementById('progressDetails');
+            const mainUploadBtn = document.getElementById('mainUploadBtn');
+
+            bulkProgress.style.display = 'block';
+            mainUploadBtn.disabled = true;
+            mainUploadBtn.innerText = 'Uploading...';
+
+            const formData = new FormData();
+            selectedFolderFiles.forEach(file => formData.append('files', file));
+            formData.append('document_type', selectedDocType);
+
+            progressText.textContent = `Uploading ${selectedFolderFiles.length} files to ${selectedDocType} store...`;
+            progressBar.style.width = '10%';
+
+            try {
+                const response = await fetch('/admin/upload-folder-files', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                progressBar.style.width = '100%';
+                progressText.textContent = 'Upload complete!';
+
+                if (response.ok) {
+                    let resultMsg = `<b>✓ Bulk Upload Complete</b><br>`;
+                    resultMsg += `<div style="margin-top:8px; line-height:1.6;">`;
+                    resultMsg += `📁 Processed: ${data.summary.processed} files<br>`;
+                    resultMsg += `✅ Successful: ${data.summary.successful} files<br>`;
+                    resultMsg += `❌ Failed: ${data.summary.failed} files<br>`;
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        resultMsg += `<div style="margin-top:10px; font-size:0.8em; color:#d32f2f;">`;
+                        resultMsg += `<strong>Errors:</strong><br>${data.errors.slice(0, 5).join('<br>')}`;
+                        if (data.errors.length > 5) {
+                            resultMsg += `<br>... and ${data.errors.length - 5} more errors`;
+                        }
+                        resultMsg += `</div>`;
+                    }
+                    
+                    resultMsg += `</div>`;
+                    
+                    showStatus(resultMsg, data.success ? 'success' : 'error');
+                    progressDetails.innerHTML = `<span style="color: #28a745;">✅ All files processed successfully</span>`;
+                    
+                    loadDocuments();
+                    resetUploadFlow();
+                } else {
+                    showStatus(`Bulk upload failed: ${data.error}`, 'error');
+                    progressDetails.innerHTML = `<span style="color: #dc3545;">❌ Upload failed</span>`;
+                }
+            } catch (error) {
+                showStatus(`Bulk upload error: ${error.message}`, 'error');
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#dc3545';
+                progressText.textContent = 'Upload failed!';
+                progressDetails.innerHTML = `<span style="color: #dc3545;">${error.message}</span>`;
+            } finally {
+                mainUploadBtn.disabled = false;
+                mainUploadBtn.innerText = '🚀 Start Upload';
+                
+                setTimeout(() => {
+                    bulkProgress.style.display = 'none';
+                    progressBar.style.width = '0%';
+                    progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
+                }, 10000);
+            }
+        }
+
+        function resetUploadFlow() {
+            selectedDocType = null;
+            selectedUploadMethod = null;
+            selectedFolderFiles = [];
+            
+            // Reset button styles
+            document.getElementById('abstractsBtn').style.borderColor = 'transparent';
+            document.getElementById('abstractsBtn').style.backgroundColor = '#f8f9fa';
+            document.getElementById('manuscriptsBtn').style.borderColor = 'transparent';
+            document.getElementById('manuscriptsBtn').style.backgroundColor = '#f8f9fa';
+            document.getElementById('singleFileBtn').style.borderColor = 'transparent';
+            document.getElementById('singleFileBtn').style.backgroundColor = '#f8f9fa';
+            document.getElementById('bulkFolderBtn').style.borderColor = 'transparent';
+            document.getElementById('bulkFolderBtn').style.backgroundColor = '#f8f9fa';
+            
+            // Hide all sections
+            document.getElementById('uploadMethodSection').style.display = 'none';
+            document.getElementById('singleFileSection').style.display = 'none';
+            document.getElementById('bulkFolderSection').style.display = 'none';
+            document.getElementById('mainUploadSection').style.display = 'none';
+            document.getElementById('folderFilePreview').style.display = 'none';
+            
+            // Reset file inputs
+            document.getElementById('fileInput').value = '';
+            document.getElementById('folderInput').value = '';
+        }
+
+        // ------------------------------------------------------------
         // CHAT LOGIC
         // ------------------------------------------------------------
         async function submitQuery() {
             const question = queryInput.value.trim();
             if (!question) return;
 
-            // UI Updates
             const emptyState = chatMessages.querySelector('.empty-state');
             if (emptyState) emptyState.remove();
             
@@ -536,7 +918,6 @@
 
                 if (response.ok) {
                     let html = formatMarkdown(data.answer);
-                    // Append Citations
                     if (data.citations && data.citations.length > 0) {
                         html += `
                             <div style="margin-top:15px; padding-top:10px; border-top:1px solid #ddd; font-size:0.85em; color:#555;">
@@ -566,7 +947,6 @@
             statusMessage.innerHTML = htmlContent;
             statusMessage.className = `status-message ${type}`;
             statusMessage.style.display = 'block';
-            // Only auto-hide if it's a simple success, keep errors/info visible longer
             if (type === 'success') {
                 setTimeout(() => { statusMessage.style.display = 'none'; }, 8000);
             }
@@ -592,10 +972,38 @@
                 .replace(/\n/g, '<br>');
         }
 
-        async function loadDocuments() {
+        async function loadDocuments(storeType = null) {
             try {
-                const response = await fetch('/documents');
+                let url = '/documents';
+                if (storeType) {
+                    url += `?store_type=${storeType}`;
+                }
+
+                const response = await fetch(url);
                 const data = await response.json();
+
+                // Update store info in sidebar header
+                const storeInfo = document.createElement('div');
+                storeInfo.style.fontSize = '0.8em';
+                storeInfo.style.marginTop = '5px';
+                storeInfo.style.color = '#666';
+
+                if (data.store && data.store_name) {
+                    const storeIcon = data.store === 'abstracts' ? '📋' : data.store === 'manuscripts' ? '📄' : '📚';
+                    storeInfo.innerHTML = `${storeIcon} <strong>${data.store_name}</strong>`;
+                } else {
+                    storeInfo.innerHTML = '📚 <strong>Current Store</strong>';
+                }
+
+                // Add store info to sidebar header if not already there
+                const existingStoreInfo = document.querySelector('.sidebar-header .store-info');
+                if (existingStoreInfo) {
+                    existingStoreInfo.replaceWith(storeInfo);
+                } else {
+                    storeInfo.className = 'store-info';
+                    const sidebarHeader = document.querySelector('.sidebar-header');
+                    sidebarHeader.appendChild(storeInfo);
+                }
 
                 if (data.documents && data.documents.length > 0) {
                     documentsList.innerHTML = data.documents.map(doc => `
@@ -607,15 +1015,15 @@
                             <span class="kg-badge">Neo4j Graph Ready</span>
                         </div>
                     `).join('');
-                    docCount.textContent = `${data.documents.length} document${data.documents.length !== 1 ? 's' : ''}`;
+                    docCount.textContent = `${data.documents.length} document${data.documents.length !== 1 ? 's' : ''} in ${data.store || 'current'} store`;
                 } else {
                     documentsList.innerHTML = `
                         <div class="empty-state" style="padding:20px 0;">
                             <div style="font-size:24px; margin-bottom:10px;">📂</div>
-                            <p style="font-size:0.9em;">No documents found.</p>
+                            <p style="font-size:0.9em;">No documents found in ${storeType || 'current'} store.</p>
                         </div>
                     `;
-                    docCount.textContent = '0 documents';
+                    docCount.textContent = `0 documents in ${storeType || 'current'} store`;
                 }
             } catch (error) {
                 console.error('Error loading documents:', error);
@@ -630,6 +1038,35 @@
                 else alert("Failed to delete document");
             } catch (error) {
                 alert("Error deleting document");
+            }
+        }
+
+        async function loadStoreStatus() {
+            const storeStatus = document.getElementById('storeStatus');
+            storeStatus.style.display = 'block';
+            storeStatus.innerHTML = 'Loading store status...';
+
+            try {
+                const response = await fetch('/admin/stores');
+                const data = await response.json();
+
+                if (response.ok && data.stores) {
+                    storeStatus.innerHTML = data.stores.map(store => `
+                        <div style="padding: 8px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 8px; background: #f9f9f9;">
+                            <div style="font-weight: 600; color: #333;">
+                                ${store.type === 'abstracts' ? '📋' : '📄'} ${store.name}
+                            </div>
+                            <div style="font-size: 0.8em; color: #666; margin-top: 2px;">
+                                Documents: ${store.document_count}
+                            </div>
+                            ${store.error ? `<div style="font-size: 0.8em; color: #d32f2f; margin-top: 2px;">Error: ${store.error}</div>` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    storeStatus.innerHTML = `<span style="color: #d32f2f;">Error: ${data.error || 'Failed to load store status'}</span>`;
+                }
+            } catch (error) {
+                storeStatus.innerHTML = `<span style="color: #d32f2f;">Error: ${error.message}</span>`;
             }
         }
 

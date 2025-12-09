@@ -169,7 +169,7 @@ class KnowledgeGraphAgent(ChatAgent):
             id, type = match.groups()
             
             # --- FIXED PROPERTIES ---
-            # 1. 'name' is essential for Visualization captions (KEEP)
+            # 1. 'name' is essential for Visualization captions 
             properties = {'name': id}
             
             # 2. Add metadata (Title, doc_id, filename)
