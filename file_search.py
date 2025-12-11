@@ -68,95 +68,58 @@ class FileSearchEngine:
         return existing
 
     def extract_metadata(self, file_path):
+        """
+        Manual metadata extraction - returns filename as title and 'N/A' as ID
+        This method is kept for backward compatibility but should be replaced with manual entry
+        """
         filename = os.path.basename(file_path)
-        self._log(f"Extracting metadata for {filename}")
-        
-        try:
-            # Upload file temporarily for Gemini to analyze structure
-            uploaded_file = self.client.files.upload(file=file_path)
-            
-            # Wait for processing
-            while uploaded_file.state == "PROCESSING":
-                time.sleep(1)
-                uploaded_file = self.client.files.get(name=uploaded_file.name)
-            
-            if uploaded_file.state == "FAILED":
-                self._log("Metadata extraction file processing failed", "error")
-                return filename, "N/A"
+        self._log(f"Using manual metadata for {filename}")
+        # Default values - will be overridden by manual entry from UI
+        return filename, "N/A"
 
-            # --- COMPREHENSIVE PROMPT FOR ID AND TITLE EXTRACTION ---
-            prompt = f"""
-            You are an expert Document Analyst. Your task is to extract the **Official Title** and the **Unique Identification Number (ID)** from the provided medical/academic document.
+    def validate_metadata(self, title, doc_id):
+        """
+        Validate manually entered metadata
+        """
+        if not title or not title.strip():
+            raise ValueError("Title cannot be empty")
+        if not doc_id or not doc_id.strip():
+            doc_id = "N/A"  # Allow empty ID but set to N/A
+        return title.strip(), doc_id.strip()
 
-            **CONTEXT INFORMATION:**
-            - **Filename:** "{filename}"
-
-            **INSTRUCTIONS:**
-            **1. EXTRACTING THE ID:**
-            * Look for "CONTROL ID", "Abstract ID", "Paper ID", "ID:".
-            * Fallback: Extract ID from filename if present.
-            * If no ID found, use "N/A".
-
-            **2. EXTRACTING THE TITLE:**
-            * Look for "TITLE:", "Abstract Title:".
-            * Fallback: Identify the Main Heading (First substantial block, UPPERCASE/Bold).
-            * Do NOT select conference names.
-
-            **OUTPUT FORMAT:**
-            Return ONLY a raw JSON object:
-            {{
-                "title": "The Extracted Title String",
-                "id": "The Extracted ID String"
-            }}
-            """
-            
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Part.from_uri(file_uri=uploaded_file.uri, mime_type=uploaded_file.mime_type),
-                    prompt
-                ]
-            )
-            
-            self.client.files.delete(name=uploaded_file.name)
-            
-            text = response.text.strip()
-            if text.startswith("```"):
-                text = re.sub(r"^```json|^```", "", text).strip()
-                text = re.sub(r"```$", "", text).strip()
-            
-            try:
-                data = json.loads(text)
-                title = data.get("title", "Unknown Title")
-                doc_id = data.get("id", "N/A")
-                title = title.replace("TITLE:", "").replace("Abstract Title:", "").strip()
-                self._log(f"Extracted -> ID: {doc_id} | Title: {title[:30]}...")
-                return title, doc_id
-            except json.JSONDecodeError:
-                self._log(f"Failed to parse JSON response: {text}", "error")
-                return filename, "N/A"
-            
-        except Exception as e:
-            self._log(f"Metadata error: {e}", "error")
-            return filename, "N/A"
-
-    def _build_metadata(self, title, doc_id, filename):
+    def _build_metadata(self, short_name, abstract_title, abstract_id, filename):
+        """
+        Constructs metadata list based on user requirements.
+        1. short_name (Mandatory) -> Key Identifier
+        2. abstract_title (Optional)
+        3. abstract_id (Optional)
+        """
         metadata_list = [
-            {"key": "title", "string_value": title},
-            {"key": "file_name", "string_value": filename},
+            {"key": "short_name", "string_value": short_name},
+            {"key": "file_name", "string_value": filename}
         ]
 
-        if "manuscripts" in self.store_name:
-            short_name = os.path.splitext(filename)[0]
-            metadata_list.append({"key": "short_name", "string_value": short_name})
-
-        if doc_id and doc_id != "N/A":
-            metadata_list.append({"key": "ID", "string_value": str(doc_id)})
+        # Add Optional fields if they exist
+        if abstract_title:
+            metadata_list.append({"key": "abstract_title", "string_value": abstract_title})
+        
+        if abstract_id:
+            metadata_list.append({"key": "abstract_id", "string_value": abstract_id})
 
         return metadata_list
 
-    def _upload_to_store(self, file_path, title, doc_id, filename):
-        metadata_list = self._build_metadata(title, doc_id, filename)
+    def _upload_to_store(self, file_path, title, doc_id, filename, short_name=None, abstract_title=None, abstract_id=None):
+        """
+        Upload to store with support for both old and new metadata schemas
+        """
+        if short_name:
+            # New schema - use new metadata fields
+            metadata_list = self._build_metadata(short_name, abstract_title, abstract_id, filename)
+            display_name = short_name
+        else:
+            # Old schema - backward compatibility
+            metadata_list = self._build_metadata(title, doc_id, filename)
+            display_name = title
 
         try:
             # The upload_to_file_search_store method handles both upload and import operations
@@ -164,7 +127,7 @@ class FileSearchEngine:
                 file_search_store_name=self.store.name,
                 file=file_path,
                 config={
-                    'display_name': title,
+                    'display_name': display_name,
                     'chunking_config': self.chunking_config,
                     'custom_metadata': metadata_list,
                 }
@@ -205,9 +168,26 @@ class FileSearchEngine:
             self._log(f"Upload error for {filename}: {str(e)}", "error")
             raise
 
-    def upload_document(self, file_path, title, doc_id, filename):
-        self._log(f"Uploading to Vector Store: {title}")
-        return self._upload_to_store(file_path, title, doc_id, filename)
+    def upload_document(self, file_path, short_name, abstract_title, abstract_id, filename):
+        """
+        Uploads document using Short Name as the Display Name (since it's the mandatory ID).
+        """
+        self._log(f"Uploading {filename} as '{short_name}'")
+
+        try:
+            operation = self._upload_to_store(
+                file_path=file_path,
+                title=short_name,  # For backward compatibility
+                doc_id=abstract_id,  # For backward compatibility
+                filename=filename,
+                short_name=short_name,
+                abstract_title=abstract_title,
+                abstract_id=abstract_id
+            )
+            return operation
+        except Exception as e:
+            self._log(f"Upload error: {str(e)}", "error")
+            raise
 
     def query(self, question):
         self._log(f"Querying model...")
@@ -233,17 +213,38 @@ class FileSearchEngine:
     def list_documents(self):
         documents = []
         try:
+            # Iterate through all docs in the store
             for doc in self.client.file_search_stores.documents.list(parent=self.store.name):
-                meta = {'name': doc.name, 'title': doc.display_name, 'id': 'N/A', 'file_name': 'Unknown'}
+                meta = {
+                    'name': doc.name,
+                    'short_name': doc.display_name,
+                    'abstract_title': None,
+                    'abstract_id': None,
+                    'file_name': 'Unknown'
+                }
+
+                # 2. extract specific keys from Google's custom_metadata list
                 if hasattr(doc, 'custom_metadata'):
                     for m in doc.custom_metadata:
-                        if m.key == 'ID': meta['id'] = m.string_value
-                        if m.key == 'file_name': meta['file_name'] = m.string_value
-                        if m.key == 'title': meta['title'] = m.string_value
-                        # We can also expose short_name here if needed
+                        if m.key == 'short_name':
+                            meta['short_name'] = m.string_value
+                        elif m.key == 'abstract_title':
+                            meta['abstract_title'] = m.string_value
+                        elif m.key == 'abstract_id':
+                            meta['abstract_id'] = m.string_value
+                        elif m.key == 'file_name':
+                            meta['file_name'] = m.string_value
+                        elif m.key == 'title':  # Backward compatibility
+                            meta['abstract_title'] = m.string_value
+                        elif m.key == 'ID':  # Backward compatibility
+                            meta['abstract_id'] = m.string_value
+
+                self._log(f"Document metadata retrieved: {meta}")  # Debug log
                 documents.append(meta)
         except Exception as e:
             self._log(f"List docs error: {e}", "error")
+
+        self._log(f"Total documents retrieved: {len(documents)}")  # Debug log
         return documents
 
     def delete_document(self, doc_name):
@@ -269,7 +270,7 @@ class FileSearchEngine:
             self._log(f"Failed to delete document {doc_name}: {str(e)}", "error")
             raise
 
-    def bulk_upload_folder(self, folder_path, document_type="abstracts", progress_callback=None):
+    def bulk_upload_folder(self, folder_path, document_type="abstracts", progress_callback=None, file_metadata=None):
         if document_type not in ["abstracts", "manuscripts"]:
             raise ValueError("document_type must be 'abstracts' or 'manuscripts'")
 
@@ -299,6 +300,9 @@ class FileSearchEngine:
         }
 
         self._log(f"Starting bulk upload of {len(pdf_files)} files to {store_name}")
+        self._log(f"File metadata provided: {file_metadata is not None and len(file_metadata) > 0}")  # Debug log
+        if file_metadata:
+            self._log(f"Metadata keys: {list(file_metadata.keys())}")  # Debug log
 
         existing_short_names = set()
         if document_type == "manuscripts":
@@ -317,14 +321,25 @@ class FileSearchEngine:
                     continue
 
             try:
-                self._log(f"Processing file {i+1}/{len(pdf_files)}: {filename}")
-                title, doc_id = self.extract_metadata(pdf_path)
+                # Extract metadata from the JSON map we sent from frontend
+                if file_metadata and filename in file_metadata:
+                    meta = file_metadata[filename]
+                    short_name = meta.get('short_name', filename) # Fallback to filename if missing
+                    abstract_title = meta.get('abstract_title', '')
+                    abstract_id = meta.get('abstract_id', '')
+                    self._log(f"Using metadata for {filename}: short_name={short_name}, abstract_title={abstract_title}, abstract_id={abstract_id}")  # Debug log
+                else:
+                    # Fallback if no metadata provided - use filename without extension as short_name
+                    short_name = os.path.splitext(filename)[0]
+                    abstract_title = ""
+                    abstract_id = ""
+                    self._log(f"No metadata found for {filename}, using defaults: short_name={short_name}")  # Debug log
 
-                self.upload_document(pdf_path, title, doc_id, filename)
+                self.upload_document(pdf_path, short_name, abstract_title, abstract_id, filename)
 
                 results['successful'] += 1
                 results['processed_files'].append({
-                    'filename': filename, 'title': title, 'status': 'success'
+                    'filename': filename, 'short_name': short_name, 'status': 'success'
                 })
 
                 if progress_callback:

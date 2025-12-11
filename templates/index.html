@@ -388,6 +388,168 @@
             border-radius: 3px;
         }
 
+        /* --------------------------------------------------------------
+           MANUAL METADATA MODAL
+        ----------------------------------------------------------------*/
+        .metadata-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow: auto;
+        }
+
+        .metadata-modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            animation: modalopen 0.3s;
+        }
+
+        @keyframes modalopen {
+            from {opacity: 0; transform: translateY(-20px);}
+            to {opacity: 1; transform: translateY(0);}
+        }
+
+        .metadata-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metadata-modal-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .close-metadata {
+            color: #999;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .close-metadata:hover {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .metadata-form {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .metadata-field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .metadata-field label {
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #444;
+        }
+
+        .metadata-field input {
+            padding: 12px 14px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.2s;
+        }
+
+        .metadata-field input:focus {
+            outline: none;
+            border-color: #28a745;
+        }
+
+        .metadata-field input::placeholder {
+            color: #aaa;
+        }
+
+        .metadata-navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 25px;
+            gap: 15px;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .metadata-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .metadata-btn.secondary {
+            background: #f8f9fa;
+            color: #333;
+        }
+
+        .metadata-btn.secondary:hover {
+            background: #e9ecef;
+        }
+
+        .metadata-btn.primary {
+            background: #28a745;
+            color: white;
+        }
+
+        .metadata-btn {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .metadata-btn.primary:hover {
+            background: #218838;
+        }
+
+        .metadata-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .file-info {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .file-info strong {
+            color: #333;
+        }
+
         @media (max-width: 1100px) {
             .container {
                 grid-template-columns: 1fr;
@@ -455,7 +617,7 @@
                         <span class="upload-icon">📤</span>
                         <h4>Drop PDF here</h4>
                         <p style="color: #666; margin-top: 10px; font-size: 0.85em;">
-                            Auto-indexes for search & extracts entities to Neo4j
+                            Manual metadata entry for precise document indexing
                         </p>
                         <input type="file" id="fileInput" accept=".pdf" style="display:none">
                         <button class="btn" onclick="document.getElementById('fileInput').click()">
@@ -565,6 +727,45 @@
                 </div>
             </div>
             <div class="documents-list" id="documentsList">
+            </div>
+        </div>
+    </div>
+
+    <!-- MANUAL METADATA MODAL - Moved before scripts to ensure DOM availability -->
+    <div id="metadataModal" class="metadata-modal">
+        <div class="metadata-modal-content">
+            <div class="metadata-modal-header">
+                <div class="metadata-modal-title">Enter Document Metadata</div>
+                <span class="close-metadata" onclick="closeMetadataModal()">&times;</span>
+            </div>
+
+            <div class="file-info">
+                <strong>File:</strong> <span id="currentFileName">filename.pdf</span><br>
+                <strong>Document Type:</strong> <span id="currentDocType">Abstracts</span>
+            </div>
+
+            <div class="metadata-form">
+                <div class="metadata-field">
+                    <label for="metaShortName">Short Name (ID) *</label>
+                    <input type="text" id="metaShortName" placeholder="e.g., Smith2023_Spine" required>
+                    <small style="color: #666; font-size: 0.8em;"></small>
+                </div>
+
+                <div class="metadata-field">
+                    <label for="metaAbsTitle">Abstract Title (Optional)</label>
+                    <input type="text" id="metaAbsTitle" placeholder="e.g., Clinical Outcomes of...">
+                </div>
+
+                <div class="metadata-field">
+                    <label for="metaAbsID">Abstract ID (Optional)</label>
+                    <input type="text" id="metaAbsID" placeholder="e.g., ABS-001">
+                </div>
+            </div>
+            </div>
+
+            <div class="metadata-navigation">
+                <button class="metadata-btn secondary" id="metadataPrevBtn" onclick="previousMetadataFile()" disabled>Previous</button>
+                <button class="metadata-btn primary" id="metadataNextBtn" onclick="nextMetadataFile()">Next</button>
             </div>
         </div>
     </div>
@@ -737,47 +938,86 @@
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('file', file);
+            // Show metadata modal for single file
+            selectedFolderFiles = [file];
+            currentMetadataFileIndex = 0;
+            showMetadataModal();
+            loadCurrentFileMetadata();
+        }
 
-            showStatus(`
-                <b>Processing "${file.name}" for ${selectedDocType} store...</b><br>
-                <div style="margin-top:8px; display:flex; gap:10px; flex-direction:column;">
-                    <span>1. Indexing for Search (Gemini)...</span>
-                    <span>2. Extracting Knowledge Graph (Neo4j)...</span>
-                </div>
-                <div style="font-size:0.8em; margin-top:8px; color:#666;">This may take up to a minute.</div>
-            `, 'info');
+        // Single file upload with metadata
+        async function uploadSingleFileWithMetadata() {
+    const file = selectedFolderFiles[0];
+    const metadata = fileMetadataMap.get(file.name);
+
+    if (!metadata) {
+        showStatus('Metadata missing.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Append new metadata fields
+    formData.append('short_name', metadata.short_name);
+    formData.append('abstract_title', metadata.abstract_title || '');
+    formData.append('abstract_id', metadata.abstract_id || '');
+
+    console.log('📤 Uploading single file with metadata:', {
+        filename: file.name,
+        metadata: metadata
+    });
+
+    showStatus(`<b>Processing ${file.name}...</b>`, 'info');
+    queryBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/upload', { 
+            method: 'POST', 
+            body: formData 
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            let successMsg = `<b>✓ Upload Complete!</b><br>`;
+            successMsg += `<div style="margin-top:8px; line-height:1.6;">`;
+            successMsg += `📄 <strong>Document:</strong> ${data.metadata.id}<br>`;
+            if (data.metadata.title) {
+                successMsg += `📋 <strong>Title:</strong> ${data.metadata.title}<br>`;
+            }
+            successMsg += `🔍 <strong>Search:</strong> ${data.status.search}<br>`;
+            successMsg += `🕸️ <strong>Graph:</strong> ${data.status.kg}`;
+            successMsg += `</div>`;
             
-            queryBtn.disabled = true;
+            showStatus(successMsg, 'success');
+            loadDocuments();
+            resetUploadFlow();
+        } else {
+            showStatus(`❌ Error: ${data.error || 'Upload failed'}`, 'error');
+        }
+    } catch (e) {
+        showStatus(`❌ Failed: ${e.message}`, 'error');
+    } finally {
+        queryBtn.disabled = false;
+    }
+}
 
-            try {
-                const response = await fetch('/upload', { method: 'POST', body: formData });
-                const data = await response.json();
+        // Modify the nextMetadataFile function for single file upload
+        function nextMetadataFile() {
+            if (!saveCurrentMetadata()) return;
 
-                if (response.ok) {
-                    let msg = `<b>✓ Processing Complete</b><br>`;
-                    msg += `<div style="margin-top:8px; line-height:1.6;">`;
-                    msg += `📄 ${data.status.search}<br>`;
-                    
-                    if(data.status.kg_success) {
-                        msg += `🕸️ ${data.status.kg}`;
-                    } else {
-                        msg += `<span style="color:#d32f2f">⚠️ ${data.status.kg}</span>`;
-                    }
-                    msg += `</div>`;
-                    
-                    showStatus(msg, data.status.kg_success ? 'success' : 'info');
-                    loadDocuments();
-                    fileInput.value = '';
-                    resetUploadFlow();
-                } else {
-                    showStatus(`Error: ${data.error}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`Upload failed: ${error.message}`, 'error');
-            } finally {
-                queryBtn.disabled = false;
+            if (selectedFolderFiles.length === 1) {
+                // Single file upload
+                closeMetadataModal();
+                uploadSingleFileWithMetadata();
+            } else if (currentMetadataFileIndex === selectedFolderFiles.length - 1) {
+                // Last file in bulk upload
+                closeMetadataModal();
+                proceedWithBulkUpload();
+            } else {
+                currentMetadataFileIndex++;
+                loadCurrentFileMetadata();
             }
         }
 
@@ -972,7 +1212,17 @@
                 .replace(/\n/g, '<br>');
         }
 
+        // Helper function to truncate text
+        function truncate(text, maxLength) {
+            if (!text) return 'N/A';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
         async function loadDocuments(storeType = null) {
+            const list = document.getElementById('documentsList');
+            list.innerHTML = '<div style="text-align:center; padding:20px;">Loading...</div>';
+
             try {
                 let url = '/documents';
                 if (storeType) {
@@ -981,6 +1231,41 @@
 
                 const response = await fetch(url);
                 const data = await response.json();
+
+                // Update document count
+                docCount.textContent = `${data.documents.length} docs`;
+
+                if(data.documents.length === 0) {
+                    list.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">No documents found.</div>';
+                    return;
+                }
+
+                // Display documents with new metadata format
+                list.innerHTML = data.documents.map(doc => `
+                    <div class="document-card">
+                        <button class="delete-btn" onclick="deleteDocument('${doc.name}')" title="Delete Document">&times;</button>
+
+                        <div class="doc-title">
+                            ${doc.short_name || 'N/A'}
+                        </div>
+
+                        <div class="doc-meta">
+                            <strong>Title:</strong>
+                            <span title="${doc.abstract_title || 'N/A'}">
+                                ${truncate(doc.abstract_title || 'N/A', 25)}
+                            </span>
+                        </div>
+
+                        <div class="doc-meta">
+                            <strong>Abs ID:</strong>
+                            <span>${doc.abstract_id || 'N/A'}</span>
+                        </div>
+
+                        <div class="doc-meta" style="color:#aaa; margin-top:6px; font-style:italic; font-size:0.8em; border-top:1px solid #eee; padding-top:4px;">
+                            ${doc.file_name}
+                        </div>
+                    </div>
+                `).join('');
 
                 // Update store info in sidebar header
                 const storeInfo = document.createElement('div');
@@ -1005,28 +1290,9 @@
                     sidebarHeader.appendChild(storeInfo);
                 }
 
-                if (data.documents && data.documents.length > 0) {
-                    documentsList.innerHTML = data.documents.map(doc => `
-                        <div class="document-card">
-                            <button class="delete-btn" onclick="deleteDocument('${doc.name}')" title="Delete">×</button>
-                            <div class="doc-title">${doc.title || doc.display_name}</div>
-                            <div class="doc-meta"><strong>ID:</strong> ${doc.id}</div>
-                            <div class="doc-meta"><strong>File:</strong> ${doc.file_name}</div>
-                            <span class="kg-badge">Neo4j Graph Ready</span>
-                        </div>
-                    `).join('');
-                    docCount.textContent = `${data.documents.length} document${data.documents.length !== 1 ? 's' : ''} in ${data.store || 'current'} store`;
-                } else {
-                    documentsList.innerHTML = `
-                        <div class="empty-state" style="padding:20px 0;">
-                            <div style="font-size:24px; margin-bottom:10px;">📂</div>
-                            <p style="font-size:0.9em;">No documents found in ${storeType || 'current'} store.</p>
-                        </div>
-                    `;
-                    docCount.textContent = `0 documents in ${storeType || 'current'} store`;
-                }
             } catch (error) {
                 console.error('Error loading documents:', error);
+                list.innerHTML = '<div style="color:red; text-align:center; padding:20px;">Failed to load documents.</div>';
             }
         }
 
@@ -1070,6 +1336,256 @@
             }
         }
 
+        // ------------------------------------------------------------
+        // MANUAL METADATA MODAL LOGIC
+        // ------------------------------------------------------------
+        let currentMetadataFileIndex = 0;
+        let fileMetadataMap = new Map();
+
+        // Metadata modal elements - initialize when needed
+        let metadataModal, currentFileName, currentDocType, metadataPrevBtn, metadataNextBtn;
+        let metaShortName, metaAbsTitle, metaAbsID;
+
+        function initializeMetadataModal() {
+            metadataModal = document.getElementById('metadataModal');
+            currentFileName = document.getElementById('currentFileName');
+            currentDocType = document.getElementById('currentDocType');
+            metadataPrevBtn = document.getElementById('metadataPrevBtn');
+            metadataNextBtn = document.getElementById('metadataNextBtn');
+            metaShortName = document.getElementById('metaShortName');
+            metaAbsTitle = document.getElementById('metaAbsTitle');
+            metaAbsID = document.getElementById('metaAbsID');
+
+            if (!metadataModal || !currentFileName || !currentDocType || !metadataPrevBtn || !metadataNextBtn ||
+                !metaShortName || !metaAbsTitle || !metaAbsID) {
+                console.error('Metadata modal elements not found!');
+                return false;
+            }
+            return true;
+        }
+
+        function showMetadataModal() {
+            if (!initializeMetadataModal()) {
+                console.error('Failed to initialize metadata modal!');
+                return;
+            }
+            metadataModal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMetadataModal() {
+            metadataModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        function updateMetadataNavigation() {
+            metadataPrevBtn.disabled = currentMetadataFileIndex === 0;
+            const isLastFile = currentMetadataFileIndex === selectedFolderFiles.length - 1;
+            metadataNextBtn.textContent = isLastFile ? 'Finish' : 'Next';
+        }
+
+// FIXED JAVASCRIPT - USE CONSISTENT FILENAME PROPERTY
+// Replace the metadata modal functions and bulk upload logic
+
+// Helper function to get consistent filename
+function getConsistentFilename(file) {
+    // For folder uploads, use webkitRelativePath (includes folder prefix)
+    // For single file uploads, use name
+    return file.webkitRelativePath || file.name;
+}
+
+// Update saveCurrentMetadata to use consistent filename
+function saveCurrentMetadata() {
+    const short_name = metaShortName.value.trim();
+    const abstract_title = metaAbsTitle.value.trim();
+    const abstract_id = metaAbsID.value.trim();
+
+    // Validation: Short Name is Mandatory
+    if (!short_name) {
+        showStatus('Short Name is required.', 'error');
+        metaShortName.focus();
+        return false;
+    }
+
+    const file = selectedFolderFiles[currentMetadataFileIndex];
+    const consistentFilename = getConsistentFilename(file);
+
+    const metadata = {
+        short_name: short_name,
+        abstract_title: abstract_title || null,
+        abstract_id: abstract_id || null
+    };
+
+    // Store with consistent filename as key
+    fileMetadataMap.set(consistentFilename, metadata);
+
+    console.log(`💾 Saved metadata for "${consistentFilename}":`, metadata);
+    return true;
+}
+
+// Update loadCurrentFileMetadata to use consistent filename
+function loadCurrentFileMetadata() {
+    const file = selectedFolderFiles[currentMetadataFileIndex];
+    const consistentFilename = getConsistentFilename(file);
+
+    currentFileName.textContent = file.name; // Display just the filename for UI
+    currentDocType.textContent = selectedDocType === 'abstracts' ? 'Abstracts' : 'Manuscripts';
+
+    console.log(`📝 Loading metadata for file: "${consistentFilename}"`);
+
+    // Load saved metadata or set defaults
+    const saved = fileMetadataMap.get(consistentFilename);
+    if (saved) {
+        metaShortName.value = saved.short_name || '';
+        metaAbsTitle.value = saved.abstract_title || '';
+        metaAbsID.value = saved.abstract_id || '';
+        console.log('✅ Loaded existing metadata:', saved);
+    } else {
+        // Default Short Name to filename without extension (User can edit)
+        metaShortName.value = file.name.replace(/\.pdf$/i, '');
+        metaAbsTitle.value = '';
+        metaAbsID.value = '';
+        console.log('📋 Using default metadata (filename without extension)');
+    }
+    updateMetadataNavigation();
+}
+
+
+        function proceedWithBulkUpload() {
+    // Create FormData with files and metadata
+    const formData = new FormData();
+
+    // Add files
+    selectedFolderFiles.forEach(file => {
+        formData.append('files', file);
+    });
+
+    // Add document type
+    formData.append('document_type', selectedDocType);
+
+    // CRITICAL FIX: Use consistent filenames (with folder prefix for folder uploads)
+    const metadataJSON = JSON.stringify(
+        Array.from(fileMetadataMap.entries()).reduce((acc, [filename, metadata]) => {
+            // filename already has the correct format (with or without prefix)
+            acc[filename] = metadata;
+            console.log(`📋 Frontend metadata key: "${filename}"`, metadata);
+            return acc;
+        }, {})
+    );
+
+    console.log('📤 Sending metadata JSON:', metadataJSON);
+    formData.append('metadata', metadataJSON);
+
+    // Start the actual upload
+    startBulkUploadWithMetadata(formData);
+}
+
+        async function startBulkUploadWithMetadata(formData) {
+            const bulkProgress = document.getElementById('bulkProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressDetails = document.getElementById('progressDetails');
+            const mainUploadBtn = document.getElementById('mainUploadBtn');
+
+            bulkProgress.style.display = 'block';
+            mainUploadBtn.disabled = true;
+            mainUploadBtn.innerText = 'Uploading...';
+
+            progressText.textContent = `Uploading ${selectedFolderFiles.length} files to ${selectedDocType} store...`;
+            progressBar.style.width = '10%';
+
+            try {
+                const response = await fetch('/admin/upload-folder-files', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                progressBar.style.width = '100%';
+                progressText.textContent = 'Upload complete!';
+
+                if (response.ok) {
+                    let resultMsg = `<b>✓ Bulk Upload Complete</b><br>`;
+                    resultMsg += `<div style="margin-top:8px; line-height:1.6;">`;
+                    resultMsg += `📁 Processed: ${data.summary.processed} files<br>`;
+                    resultMsg += `✅ Successful: ${data.summary.successful} files<br>`;
+                    resultMsg += `❌ Failed: ${data.summary.failed} files<br>`;
+
+                    if (data.errors && data.errors.length > 0) {
+                        resultMsg += `<div style="margin-top:10px; font-size:0.8em; color:#d32f2f;">`;
+                        resultMsg += `<strong>Errors:</strong><br>${data.errors.slice(0, 5).join('<br>')}`;
+                        if (data.errors.length > 5) {
+                            resultMsg += `<br>... and ${data.errors.length - 5} more errors`;
+                        }
+                        resultMsg += `</div>`;
+                    }
+
+                    resultMsg += `</div>`;
+
+                    showStatus(resultMsg, data.success ? 'success' : 'error');
+                    progressDetails.innerHTML = `<span style="color: #28a745;">✅ All files processed successfully</span>`;
+
+                    loadDocuments();
+                    resetUploadFlow();
+                } else {
+                    showStatus(`Bulk upload failed: ${data.error}`, 'error');
+                    progressDetails.innerHTML = `<span style="color: #dc3545;">❌ Upload failed</span>`;
+                }
+            } catch (error) {
+                showStatus(`Bulk upload error: ${error.message}`, 'error');
+                progressBar.style.width = '100%';
+                progressBar.style.background = '#dc3545';
+                progressText.textContent = 'Upload failed!';
+                progressDetails.innerHTML = `<span style="color: #dc3545;">${error.message}</span>`;
+            } finally {
+                mainUploadBtn.disabled = false;
+                mainUploadBtn.innerText = '🚀 Start Upload';
+
+                setTimeout(() => {
+                    bulkProgress.style.display = 'none';
+                    progressBar.style.width = '0%';
+                    progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
+                }, 10000);
+            }
+        }
+
+        // Modify single file upload to show metadata modal
+        async function handleFileUpload(file = null) {
+            if (!file) {
+                const fileInput = document.getElementById('fileInput');
+                if (fileInput.files.length === 0) {
+                    fileInput.click();
+                    return;
+                }
+                file = fileInput.files[0];
+            }
+
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showStatus('Please upload a PDF file', 'error');
+                return;
+            }
+
+            // Show metadata modal for single file
+            selectedFolderFiles = [file];
+            currentMetadataFileIndex = 0;
+            showMetadataModal();
+            loadCurrentFileMetadata();
+        }
+
+        // Modify bulk upload to show metadata modal
+        function startBulkUpload() {
+            if (selectedFolderFiles.length === 0) {
+                showStatus('⚠️ Please select a folder with PDF files first', 'error');
+                return;
+            }
+
+            // Show metadata modal for first file
+            currentMetadataFileIndex = 0;
+            showMetadataModal();
+            loadCurrentFileMetadata();
+        }
+
         // Enter key to send
         queryInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -1077,6 +1593,6 @@
                 submitQuery();
             }
         });
-    </script>
-</body>
-</html>
+        </script>
+    </body>
+    </html>

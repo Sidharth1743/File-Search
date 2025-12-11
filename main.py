@@ -1,4 +1,4 @@
-# main.py - ENHANCED ADMIN BACKEND
+# main.py - FIXED METADATA MAPPING
 import logging
 import sys
 import os
@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import uuid
 from datetime import datetime
+import json
 
 # --- CAMEL & Neo4j Imports ---
 from camel.models import ModelFactory
@@ -188,18 +189,36 @@ def upload_file():
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(pdf_path)
         
-        text_content = run_advanced_ocr(pdf_path)
-        if not text_content:
-             return jsonify({'error': 'OCR failed'}), 500
+        # 1. Capture New Metadata Fields
+        short_name = request.form.get('short_name')
+        abstract_title = request.form.get('abstract_title', '')
+        abstract_id = request.form.get('abstract_id', '')
 
-        logger.info("🔍 [Search] Indexing PDF...")
-        title, doc_id = fs_engine.extract_metadata(pdf_path)
-        fs_engine.upload_document(pdf_path, title, doc_id, filename)
+        # Validate Mandatory Field
+        if not short_name:
+            return jsonify({'error': 'Short Name is mandatory'}), 400
+
+        # OCR Processing
+        text_content = run_advanced_ocr(pdf_path)
+        if not text_content: return jsonify({'error': 'OCR failed'}), 500
+
+        logger.info(f"🔍 [Search] Indexing PDF as {short_name}...")
+
+        # 2. Upload to File Search with new schema
+        fs_engine.upload_document(
+            file_path=pdf_path, 
+            short_name=short_name, 
+            abstract_title=abstract_title, 
+            abstract_id=abstract_id, 
+            filename=filename
+        )
         search_msg = "Indexed in Google File Search."
 
+        # 3. KG Processing with new metadata
         kg_metadata = {
-            'document_title': title,
-            'document_id': doc_id,
+            'short_name': short_name,
+            'abstract_title': abstract_title,
+            'abstract_id': abstract_id,
             'file_name': filename,
             'source': 'SpineDAO_Pipeline'
         }
@@ -211,14 +230,9 @@ def upload_file():
 
         return jsonify({
             'success': True,
-            'metadata': {'title': title, 'id': doc_id},
-            'status': {
-                'search': search_msg,
-                'kg': kg_msg,
-                'kg_success': kg_success
-            }
+            'metadata': {'id': short_name, 'title': abstract_title},
+            'status': {'search': search_msg, 'kg': kg_msg, 'kg_success': kg_success}
         })
-
     except Exception as e:
         logger.error(f"❌ Route Error: {e}", exc_info=True)
         return jsonify({
@@ -281,12 +295,10 @@ def query():
 def list_docs():
     if not fs_engine: return jsonify({'documents': []})
 
-    # Get store type from query parameter, default to current engine store
     store_type = request.args.get('store_type', None)
 
     if store_type and store_type in ['abstracts', 'manuscripts']:
         try:
-            # Create temporary engine for the requested store type
             temp_engine = FileSearchEngine(store_name=f"{store_type}_store", logger=logger)
             documents = temp_engine.list_documents()
             return jsonify({
@@ -298,7 +310,6 @@ def list_docs():
             logger.error(f"❌ Error listing documents from {store_type} store: {e}", exc_info=True)
             return jsonify({'documents': []})
     else:
-        # Use current engine store
         documents = fs_engine.list_documents()
         return jsonify({
             'documents': documents,
@@ -387,7 +398,6 @@ def admin_upload_folder_path():
         task_id = str(uuid.uuid4())
         logger.info(f"Admin bulk upload started [Task: {task_id}]: {folder_path} -> {document_type}")
         
-        # Initialize task tracking
         active_tasks[task_id] = {
             'status': 'processing',
             'current': 0,
@@ -448,7 +458,7 @@ def admin_upload_folder_path():
 def admin_upload_folder_files():
     """
     OPTION 2: Multiple file upload (browser folder selection)
-    User selects folder in browser, all files uploaded
+    FIXED VERSION with robust filename mapping
     """
     if not ocr_engine or not fs_engine or not kg_agent:
         return jsonify({
@@ -504,11 +514,22 @@ def admin_upload_folder_files():
         batch_folder = os.path.join(app.config['UPLOAD_FOLDER'], f'batch_{task_id}')
         os.makedirs(batch_folder, exist_ok=True)
         
-        # Save all files first
+        # CRITICAL FIX: Build mapping BEFORE saving files
+        # Map: original_filename -> secure_filename
+        # Use file.filename which includes the full path from browser (e.g., "exa/file.pdf")
+        filename_mapping = {}
+        for file in pdf_files:
+            original_filename = file.filename  # This includes folder prefix from browser
+            secure_name = secure_filename(original_filename)
+            filename_mapping[original_filename] = secure_name
+            logger.info(f"📋 Mapping: '{original_filename}' -> '{secure_name}'")
+        
+        # Save all files with secure names
         saved_files = []
         for file in pdf_files:
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(batch_folder, filename)
+            original_filename = file.filename
+            secure_name = filename_mapping[original_filename]
+            file_path = os.path.join(batch_folder, secure_name)
             file.save(file_path)
             saved_files.append(file_path)
         
@@ -533,11 +554,41 @@ def admin_upload_folder_files():
             if error:
                 active_tasks[task_id]['errors'].append(f"{filename}: {error}")
         
-        # Process using existing bulk upload logic
+        # Parse metadata JSON if provided
+        metadata_json = request.form.get('metadata')
+        original_file_metadata = {}
+
+        if metadata_json:
+            try:
+                original_file_metadata = json.loads(metadata_json)
+                logger.info(f"📋 Received metadata for {len(original_file_metadata)} files")
+                # Log the keys to verify they match file.filename format
+                logger.info(f"📋 Metadata keys received: {list(original_file_metadata.keys())[:5]}")  # First 5 keys
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Invalid metadata JSON format: {e}")
+                original_file_metadata = {}
+
+        # CRITICAL FIX: Remap metadata using filename_mapping
+        # Convert from original filenames to secure filenames
+        remapped_metadata = {}
+        if original_file_metadata:
+            for original_filename, metadata in original_file_metadata.items():
+                secure_name = filename_mapping.get(original_filename)
+                if secure_name:
+                    remapped_metadata[secure_name] = metadata
+                    logger.info(f"✅ Metadata mapped: '{original_filename}' -> '{secure_name}'")
+                    logger.info(f"   Data: {metadata}")
+                else:
+                    logger.warning(f"⚠️ No mapping found for '{original_filename}'")
+        
+        logger.info(f"📊 Final remapped metadata count: {len(remapped_metadata)}")
+
+        # Process using existing bulk upload logic with remapped metadata
         results = fs_engine.bulk_upload_folder(
             folder_path=batch_folder,
             document_type=document_type,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            file_metadata=remapped_metadata
         )
         
         # Cleanup temporary folder
@@ -621,7 +672,7 @@ def admin_list_stores():
                     'name': f"{store_type}_store",
                     'type': store_type,
                     'document_count': len(documents),
-                    'documents': documents[:10]  # First 10 for preview
+                    'documents': documents[:10]
                 })
             except Exception as e:
                 stores_info.append({
